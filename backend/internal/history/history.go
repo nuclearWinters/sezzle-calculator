@@ -11,15 +11,25 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/google/uuid"
 )
 
-// Entry is a single recorded calculation.
+// Entry is a single recorded calculation. ID is the table's auto-increment
+// primary key — it doubles as both the row's public identifier and (paired
+// with CreatedAt) its keyset pagination position; see Cursor.
 type Entry struct {
-	ID         string
+	ID         int64
 	Operations string
 	Result     string
 	CreatedAt  time.Time
+}
+
+// Cursor identifies a position in the history table's (created_at, id)
+// keyset ordering. created_at alone isn't a safe seek key — two rows can
+// share the same microsecond under fast concurrent inserts — so id
+// (monotonic, always unique) breaks the tie.
+type Cursor struct {
+	CreatedAt time.Time
+	ID        int64
 }
 
 // Store persists calculation history to MySQL.
@@ -52,74 +62,106 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// Insert records a completed calculation and returns the stored entry.
+// Insert records a completed calculation and returns the stored entry,
+// including the id MySQL assigned it.
 func (s *Store) Insert(ctx context.Context, operations, result string) (Entry, error) {
 	entry := Entry{
-		ID:         uuid.NewString(),
 		Operations: operations,
 		Result:     result,
 		CreatedAt:  time.Now().UTC(),
 	}
 
-	_, err := s.db.ExecContext(
+	res, err := s.db.ExecContext(
 		ctx,
-		`INSERT INTO history (id, operations, result, created_at) VALUES (?, ?, ?, ?)`,
-		entry.ID, entry.Operations, entry.Result, entry.CreatedAt,
+		`INSERT INTO history (operations, result, created_at) VALUES (?, ?, ?)`,
+		entry.Operations, entry.Result, entry.CreatedAt,
 	)
 	if err != nil {
 		return Entry{}, fmt.Errorf("insert history entry: %w", err)
 	}
 
+	id, err := res.LastInsertId()
+	if err != nil {
+		return Entry{}, fmt.Errorf("read inserted history id: %w", err)
+	}
+	entry.ID = id
+
 	return entry, nil
 }
 
-// List returns up to limit entries older than cursor (a nil cursor starts
-// from the most recent entry), newest first, plus the cursor to pass in
-// order to fetch the next page (nil if there isn't one).
-func (s *Store) List(ctx context.Context, cursor *int64, limit int) ([]Entry, *int64, error) {
-	query := `SELECT seq, id, operations, result, created_at FROM history`
+// List returns up to limit entries strictly before cursor in (created_at,
+// id) order (a nil cursor starts from the most recent entry), newest
+// first, plus the cursor to pass in order to fetch the next page (nil if
+// there isn't one).
+func (s *Store) List(ctx context.Context, cursor *Cursor, limit int) ([]Entry, *Cursor, error) {
+	query := `SELECT id, operations, result, created_at FROM history`
 	args := []any{}
 	if cursor != nil {
-		query += ` WHERE seq < ?`
-		args = append(args, *cursor)
+		query += ` WHERE (created_at, id) < (?, ?)`
+		args = append(args, cursor.CreatedAt, cursor.ID)
 	}
-	query += ` ORDER BY seq DESC LIMIT ?`
+	query += ` ORDER BY created_at DESC, id DESC LIMIT ?`
 	// Fetch one extra row so we know whether a next page exists without a
 	// separate COUNT query.
 	args = append(args, limit+1)
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	fetched, err := s.query(ctx, query, args...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list history: %w", err)
 	}
-	defer rows.Close()
 
-	type fetchedRow struct {
-		seq int64
-		Entry
-	}
-	var fetched []fetchedRow
-	for rows.Next() {
-		var r fetchedRow
-		if err := rows.Scan(&r.seq, &r.ID, &r.Operations, &r.Result, &r.CreatedAt); err != nil {
-			return nil, nil, fmt.Errorf("scan history row: %w", err)
-		}
-		fetched = append(fetched, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("iterate history rows: %w", err)
-	}
-
-	var nextCursor *int64
+	var nextCursor *Cursor
 	if len(fetched) > limit {
 		fetched = fetched[:limit]
-		last := fetched[len(fetched)-1].seq
-		nextCursor = &last
+		last := fetched[len(fetched)-1]
+		nextCursor = &Cursor{CreatedAt: last.CreatedAt, ID: last.ID}
 	}
 
-	entries := make([]Entry, len(fetched))
-	for i, r := range fetched {
-		entries[i] = r.Entry
+	return fetched, nextCursor, nil
+}
+
+// ListSince returns every entry strictly after cursor in (created_at, id)
+// order (a nil cursor starts from the very beginning of history), oldest
+// first. It's the same keyset-seek query as List — same cursor, same
+// table, same (created_at, id) key — just walking the opposite direction:
+// List seeks backward (newest first) to paginate through history already
+// seen, while ListSince seeks forward (oldest first) to replay whatever's
+// been added since.
+func (s *Store) ListSince(ctx context.Context, cursor *Cursor) ([]Entry, error) {
+	query := `SELECT id, operations, result, created_at FROM history`
+	args := []any{}
+	if cursor != nil {
+		query += ` WHERE (created_at, id) > (?, ?)`
+		args = append(args, cursor.CreatedAt, cursor.ID)
 	}
-	return entries, nextCursor, nil
+	query += ` ORDER BY created_at ASC, id ASC`
+
+	entries, err := s.query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list history since cursor: %w", err)
+	}
+
+	return entries, nil
+}
+
+func (s *Store) query(ctx context.Context, query string, args ...any) ([]Entry, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []Entry
+	for rows.Next() {
+		var e Entry
+		if err := rows.Scan(&e.ID, &e.Operations, &e.Result, &e.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan history row: %w", err)
+		}
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate history rows: %w", err)
+	}
+
+	return entries, nil
 }

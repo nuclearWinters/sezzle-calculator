@@ -13,7 +13,7 @@ const styles = stylex.create({
     padding: "20px 16px",
     marginBottom: "16px",
     textAlign: "right",
-    minHeight: "84px",
+    height: "84px",
     display: "flex",
     flexDirection: "column",
     justifyContent: "flex-end",

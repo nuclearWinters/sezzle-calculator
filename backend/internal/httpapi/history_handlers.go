@@ -1,9 +1,12 @@
 package httpapi
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"sezzle-calculator/backend/internal/history"
 )
@@ -34,14 +37,10 @@ func (a *API) ListHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		limit = maxHistoryLimit
 	}
 
-	var cursor *int64
-	if raw := r.URL.Query().Get("cursor"); raw != "" {
-		parsed, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid \"cursor\" query parameter")
-			return
-		}
-		cursor = &parsed
+	cursor, err := parseCursor(r.URL.Query().Get("cursor"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid \"cursor\" query parameter")
+		return
 	}
 
 	entries, nextCursor, err := a.History.List(r.Context(), cursor, limit)
@@ -66,13 +65,40 @@ func toHistoryItems(entries []history.Entry) []HistoryItem {
 }
 
 func toHistoryItem(e history.Entry) *HistoryItem {
-	return &HistoryItem{ID: e.ID, Operations: e.Operations, Result: e.Result, CreatedAt: e.CreatedAt}
+	return &HistoryItem{ID: strconv.FormatInt(e.ID, 10), Operations: e.Operations, Result: e.Result, CreatedAt: e.CreatedAt}
 }
 
-func formatCursor(cursor *int64) *string {
+// formatCursor and parseCursor convert a history.Cursor to and from its
+// wire form: "<created_at as unix microseconds>_<id>". Shared by the
+// query-param cursor on GET /history and the JSON-payload cursor on the
+// history sync WebSocket — both endpoints seek the same (created_at, id)
+// keyset, just in opposite directions (see history.Store.List/ListSince).
+func formatCursor(cursor *history.Cursor) *string {
 	if cursor == nil {
 		return nil
 	}
-	s := strconv.FormatInt(*cursor, 10)
+	s := fmt.Sprintf("%d_%d", cursor.CreatedAt.UnixMicro(), cursor.ID)
 	return &s
+}
+
+func parseCursor(raw string) (*history.Cursor, error) {
+	if raw == "" {
+		return nil, nil
+	}
+
+	micros, id, found := strings.Cut(raw, "_")
+	if !found {
+		return nil, fmt.Errorf("malformed cursor %q", raw)
+	}
+
+	parsedMicros, err := strconv.ParseInt(micros, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("malformed cursor %q: %w", raw, err)
+	}
+	parsedID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("malformed cursor %q: %w", raw, err)
+	}
+
+	return &history.Cursor{CreatedAt: time.UnixMicro(parsedMicros).UTC(), ID: parsedID}, nil
 }

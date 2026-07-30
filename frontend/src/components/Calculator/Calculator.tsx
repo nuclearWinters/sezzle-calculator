@@ -8,8 +8,6 @@ import CalculatorDisplay from "./CalculatorDisplay";
 import CalculatorError from "./CalculatorError";
 import { useHistoryContext } from "../History/HistoryContext";
 
-// Kept in sync by hand with the backend's calculator.Precision (Go doesn't
-// share this constant across languages).
 Decimal.set({ precision: 50 });
 
 const colors = {
@@ -19,9 +17,6 @@ const colors = {
 
 const styles = stylex.create({
   calculator: {
-    // min() with a vw-based fallback keeps the card from overflowing on
-    // narrow phones (the body already applies 16px of padding on each
-    // side) while capping it at a sensible size on larger screens.
     width: "min(360px, calc(100vw - 32px))",
     backgroundColor: colors.cardBg,
     border: `1px solid ${colors.cardBorder}`,
@@ -31,29 +26,22 @@ const styles = stylex.create({
   },
 });
 
-// Allows typing numbers up to 999999999999999999999 (21 digits) directly.
 const MAX_DIGITS = 21;
 const MAX_EXPONENT_DIGITS = 3;
 
 const operatorLabel: Record<BinaryOperation, string> = {
   add: "+",
-  subtract: "−",
-  multiply: "×",
+  subtract: "U+2212",
+  multiply: "U+00d7",
   divide: "÷",
   power: "^",
   percentage: "%",
 };
 
-// Shows the full, exact value — no rounding — so the display can never
-// misrepresent a result as "rounder" than it actually is (e.g. a value like
-// 99999999999999999998.9 staying visibly distinct from 1e20).
 function formatNumber(value: Decimal): string {
   return value.isFinite() ? value.toString() : "Error";
 }
 
-// Same value, spelled out without exponential notation — used as a tooltip
-// (title attribute) so hovering over a number like 1.00000...004e+32 reveals
-// its plain-decimal form instead of having to count zeros by eye.
 function formatExact(value: Decimal): string {
   return value.isFinite() ? value.toFixed() : "Error";
 }
@@ -91,8 +79,7 @@ export default function Calculator() {
   const [lastResultOpt, setLastResultOpt] = useOptimistic(lastResult)
   const [lastEquationOpt, setLastEquationOpt] = useOptimistic(lastEquation)
   const [isPending, startTransition] = useTransition()
-
-  const { enqueue, confirm, remove } = useHistoryContext();
+  const { optimisticUpdate } = useHistoryContext();
 
   function inputDigit(digit: string) {
     const active = operation === null ? firstNumber : secondNumber;
@@ -179,36 +166,20 @@ export default function Calculator() {
     let opToApply: BinaryOperation;
     let first: Decimal;
     let second: Decimal;
-    try {
-      if (operation !== null) {
-        opToApply = operation;
-        first = new Decimal(firstNumber);
-        second = new Decimal(secondNumber === "" ? firstNumber : secondNumber);
-      } else if (lastOperation !== null && lastOperand !== null) {
-        opToApply = lastOperation;
-        first = firstNumber === "" ? lastResultOpt : new Decimal(firstNumber);
-        second = lastOperand;
-      } else {
-        return;
-      }
-    } catch {
+    if (operation !== null) {
+      opToApply = operation;
+      first = new Decimal(firstNumber);
+      second = new Decimal(secondNumber === "" ? firstNumber : secondNumber);
+    } else if (lastOperation !== null && lastOperand !== null) {
+      opToApply = lastOperation;
+      first = firstNumber === "" ? lastResultOpt : new Decimal(firstNumber);
+      second = lastOperand;
+    } else {
       return;
     }
 
     const equation = `${formatNumber(first)} ${operatorLabel[opToApply]} ${formatNumber(second)}`;
     const optimisticResult = opSwitch(opToApply, first, second);
-    // Enqueued outside startTransition, deliberately: a plain setState
-    // called *inside* startTransition is deferred along with everything
-    // else in the transition (only useOptimistic setters are special-cased
-    // to show immediately there) — so this needs to be an immediate update,
-    // same as the other resets below, or the "optimistic" entry would only
-    // ever appear once the transition (i.e. the whole calculation) settles.
-    const pendingId = enqueue({
-      id: crypto.randomUUID(),
-      operations: equation,
-      result: formatNumber(optimisticResult),
-      createdAt: new Date().toISOString(),
-    });
 
     setError(null);
     setFirstNumber("");
@@ -221,13 +192,17 @@ export default function Calculator() {
       try {
         setLastEquationOpt(`${equation} =`)
         setLastResultOpt(optimisticResult);
-        const { result, historyItem } = await calculate(opToApply, first, second);
+        const calculatePromise = calculate(opToApply, first, second);
+        optimisticUpdate({
+          id: "mock-" + crypto.randomUUID(),
+          operations: equation,
+          result: formatNumber(optimisticResult),
+          createdAt: new Date().toISOString(),
+        }, calculatePromise);
+        const { result } = await calculatePromise
         setLastEquation(`${equation} =`);
         setLastResult(result);
-        if (historyItem) confirm(pendingId, historyItem);
-        else remove(pendingId);
       } catch (err) {
-        remove(pendingId);
         setError(err instanceof CalculatorApiError ? err.message : "Something went wrong. Please try again.");
       }
     })
@@ -247,25 +222,8 @@ export default function Calculator() {
     setSecondNumber("");
   }
 
-  // "=" pressed on a bare typed number — no operator chosen (and nothing to
-  // repeat) — normalizes it through the backend as a unary operation, e.g.
-  // typing "1e2" then "=" shows "100". Goes through the same
-  // calculate/history pipeline as every other operation rather than the
-  // frontend just reformatting the string itself.
   async function identity() {
-    let value: Decimal;
-    try {
-      value = new Decimal(firstNumber);
-    } catch {
-      return;
-    }
-
-    const pendingId = enqueue({
-      id: crypto.randomUUID(),
-      operations: formatNumber(value),
-      result: formatNumber(value),
-      createdAt: new Date().toISOString(),
-    });
+    const value: Decimal = new Decimal(firstNumber);
 
     setError(null);
     setHasUserTypedAfterResult(true);
@@ -274,14 +232,18 @@ export default function Calculator() {
       try {
         setLastEquationOpt(`${formatNumber(value)} =`)
         setLastResultOpt(value);
-        const { result, historyItem } = await calculate("identity", value);
+        const calculatePromise = calculate("identity", value);
+        optimisticUpdate({
+          id: "mock-" + crypto.randomUUID(),
+          operations: formatNumber(value),
+          result: formatNumber(value),
+          createdAt: new Date().toISOString(),
+        }, calculatePromise);
+        const { result } = await calculatePromise
         setLastEquation(`${formatNumber(value)} =`);
         setLastResult(result);
         setHasUserTypedAfterResult(false);
-        if (historyItem) confirm(pendingId, historyItem);
-        else remove(pendingId);
       } catch (err) {
-        remove(pendingId);
         setError(err instanceof CalculatorApiError ? err.message : "Something went wrong. Please try again.");
       }
     })
@@ -299,19 +261,7 @@ export default function Calculator() {
     const canCalculate = secondNumber === ""
     if (!canCalculate) return;
 
-    let value: Decimal;
-    try {
-      value = firstNumber === "" ? lastResultOpt : new Decimal(firstNumber);
-    } catch {
-      return;
-    }
-
-    const pendingId = enqueue({
-      id: crypto.randomUUID(),
-      operations: `sqrt(${formatNumber(value)})`,
-      result: formatNumber(value.sqrt()),
-      createdAt: new Date().toISOString(),
-    });
+    const value: Decimal = firstNumber === "" ? lastResultOpt : new Decimal(firstNumber);
 
     setError(null);
     setHasUserTypedAfterResult(true);
@@ -321,14 +271,18 @@ export default function Calculator() {
       try {
         setLastEquationOpt(`√${formatNumber(value)} =`)
         setLastResultOpt(value.sqrt());
-        const { result, historyItem } = await calculate("sqrt", value);
+        const calculatePromise = calculate("sqrt", value);
+        optimisticUpdate({
+          id: "mock-" + crypto.randomUUID(),
+          operations: `√${formatNumber(value)}`,
+          result: formatNumber(value.sqrt()),
+          createdAt: new Date().toISOString(),
+        }, calculatePromise);
+        const { result } = await calculatePromise
         setLastEquation(`√${formatNumber(value)} =`);
         setLastResult(result);
         setHasUserTypedAfterResult(false);
-        if (historyItem) confirm(pendingId, historyItem);
-        else remove(pendingId);
       } catch (err) {
-        remove(pendingId);
         setError(err instanceof CalculatorApiError ? err.message : "Something went wrong. Please try again.");
       }
     })

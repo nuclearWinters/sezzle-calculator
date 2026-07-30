@@ -3,25 +3,45 @@ import Calculator from "./components/Calculator/Calculator";
 import History from "./components/History/History";
 import HistoryProvider from "./components/History/HistoryContext";
 import ErrorBoundary from "./components/ErrorBoundary/ErrorBoundary";
+import { fetchHistory } from "./api/historyApi";
+import { Suspense } from "react";
+import HistoryLoading from "./components/History/HistoryLoading";
 
 const styles = stylex.create({
   stack: {
     display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    flexWrap: "wrap",
     gap: "16px",
+  },
+  // There's no room for a side-by-side history panel on a small (roughly
+  // phone-width) screen, so it's dropped rather than squeezed in.
+  // `display: contents` in the non-hidden case keeps this wrapper from
+  // affecting the flex layout — History's own card still sizes itself.
+  historyPanel: {
+    display: {
+      default: "contents",
+      "@media (max-width: 600px)": "none",
+    },
   },
 });
 
 function App() {
+  const historyPromise = fetchHistory(null, 20)
   return (
     <div {...stylex.props(styles.stack)}>
-      <HistoryProvider>
+      <HistoryProvider historyPromise={historyPromise}>
+        <div {...stylex.props(styles.historyPanel)}>
+          <ErrorBoundary label="History">
+            <Suspense fallback={<HistoryLoading />}>
+              <History />
+            </Suspense>
+          </ErrorBoundary>
+        </div>
         <ErrorBoundary label="Calculator">
           <Calculator />
-        </ErrorBoundary>
-        <ErrorBoundary label="History">
-          <History />
         </ErrorBoundary>
       </HistoryProvider>
     </div>

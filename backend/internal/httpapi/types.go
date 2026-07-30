@@ -32,7 +32,8 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// HistoryItem is a single calculation as returned by the history endpoint.
+// HistoryItem is a single calculation, as returned by the history endpoint
+// and streamed over the history sync WebSocket.
 type HistoryItem struct {
 	ID         string    `json:"id"`
 	Operations string    `json:"operations"`

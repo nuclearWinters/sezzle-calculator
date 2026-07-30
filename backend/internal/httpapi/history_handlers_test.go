@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,11 +20,15 @@ type fakeHistoryStore struct {
 	inserted  []insertedEntry
 	insertErr error
 
-	gotCursor  *int64
+	gotCursor  *history.Cursor
 	gotLimit   int
 	entries    []history.Entry
-	nextCursor *int64
+	nextCursor *history.Cursor
 	listErr    error
+
+	gotSinceCursor *history.Cursor
+	sinceEntries   []history.Entry
+	sinceErr       error
 }
 
 type insertedEntry struct {
@@ -36,16 +41,24 @@ func (f *fakeHistoryStore) Insert(_ context.Context, operations, result string) 
 		return history.Entry{}, f.insertErr
 	}
 	f.inserted = append(f.inserted, insertedEntry{operations: operations, result: result})
-	return history.Entry{ID: "fake-id", Operations: operations, Result: result, CreatedAt: time.Now()}, nil
+	return history.Entry{ID: 1, Operations: operations, Result: result, CreatedAt: time.Now()}, nil
 }
 
-func (f *fakeHistoryStore) List(_ context.Context, cursor *int64, limit int) ([]history.Entry, *int64, error) {
+func (f *fakeHistoryStore) List(_ context.Context, cursor *history.Cursor, limit int) ([]history.Entry, *history.Cursor, error) {
 	f.gotCursor = cursor
 	f.gotLimit = limit
 	if f.listErr != nil {
 		return nil, nil, f.listErr
 	}
 	return f.entries, f.nextCursor, nil
+}
+
+func (f *fakeHistoryStore) ListSince(_ context.Context, cursor *history.Cursor) ([]history.Entry, error) {
+	f.gotSinceCursor = cursor
+	if f.sinceErr != nil {
+		return nil, f.sinceErr
+	}
+	return f.sinceEntries, nil
 }
 
 func TestCalculateHandlerRecordsHistoryOnSuccess(t *testing.T) {
@@ -235,16 +248,18 @@ func TestCalculateHandlerSucceedsEvenIfHistoryInsertFails(t *testing.T) {
 }
 
 func TestListHistoryHandlerReturnsItemsAndForwardsCursorAndLimit(t *testing.T) {
-	next := int64(5)
+	nextCreatedAt := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
 	fake := &fakeHistoryStore{
 		entries: []history.Entry{
-			{ID: "abc", Operations: "1 + 2", Result: "3", CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+			{ID: 42, Operations: "1 + 2", Result: "3", CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
 		},
-		nextCursor: &next,
+		nextCursor: &history.Cursor{CreatedAt: nextCreatedAt, ID: 5},
 	}
 	api := &API{History: fake}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/history?limit=1&cursor=10", nil)
+	reqCreatedAt := time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC)
+	cursorParam := fmt.Sprintf("%d_10", reqCreatedAt.UnixMicro())
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/history?limit=1&cursor="+cursorParam, nil)
 	rec := httptest.NewRecorder()
 	api.ListHistoryHandler(rec, req)
 
@@ -264,18 +279,19 @@ func TestListHistoryHandlerReturnsItemsAndForwardsCursorAndLimit(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if len(payload.Items) != 1 || payload.Items[0].ID != "abc" || payload.Items[0].Operations != "1 + 2" {
+	if len(payload.Items) != 1 || payload.Items[0].ID != "42" || payload.Items[0].Operations != "1 + 2" {
 		t.Fatalf("items = %+v, want the one fake entry", payload.Items)
 	}
-	if payload.NextCursor == nil || *payload.NextCursor != "5" {
-		t.Errorf("nextCursor = %v, want \"5\"", payload.NextCursor)
+	wantNextCursor := fmt.Sprintf("%d_5", nextCreatedAt.UnixMicro())
+	if payload.NextCursor == nil || *payload.NextCursor != wantNextCursor {
+		t.Errorf("nextCursor = %v, want %q", payload.NextCursor, wantNextCursor)
 	}
 
 	if fake.gotLimit != 1 {
 		t.Errorf("List() called with limit = %d, want 1", fake.gotLimit)
 	}
-	if fake.gotCursor == nil || *fake.gotCursor != 10 {
-		t.Errorf("List() called with cursor = %v, want 10", fake.gotCursor)
+	if fake.gotCursor == nil || fake.gotCursor.ID != 10 || !fake.gotCursor.CreatedAt.Equal(reqCreatedAt) {
+		t.Errorf("List() called with cursor = %+v, want {CreatedAt: %v, ID: 10}", fake.gotCursor, reqCreatedAt)
 	}
 }
 

@@ -76,6 +76,21 @@ const styles = stylex.create({
   wide: {
     gridColumn: "span 3",
   },
+  // "EXP" doesn't fit comfortably on a small (roughly phone-width) screen's
+  // narrow keys, so it shortens to "E" there — same breakpoint as the
+  // history panel in App.tsx.
+  fullLabel: {
+    display: {
+      default: "inline",
+      "@media (max-width: 600px)": "none",
+    },
+  },
+  shortLabel: {
+    display: {
+      default: "none",
+      "@media (max-width: 600px)": "inline",
+    },
+  },
 });
 
 function Key({
@@ -171,7 +186,8 @@ export default function CalculatorButtons({
       </Key>
 
       <Key variant="number" onClick={onExponent}>
-        EXP
+        <span {...stylex.props(styles.fullLabel)}>EXP</span>
+        <span {...stylex.props(styles.shortLabel)}>E</span>
       </Key>
       <Key variant="number" onClick={() => onDigit("0")}>
         0

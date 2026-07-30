@@ -65,6 +65,20 @@ sezzle-calculator/
   MySQL: `CalculateHandler` logs (and swallows) history-insert failures
   rather than failing the response, and the server itself starts even if it
   can't reach MySQL at boot (it just runs without history).
+- **Shared history via a Context, updated as a plain queue — not `useOptimistic`.**
+  `Calculator` and `History` both read/write one list through
+  `HistoryContext`. A completed calculation's `history` record (see above)
+  is appended immediately rather than waiting for the next `/history`
+  fetch/scroll. This is deliberately plain `useState` (`enqueue`/`confirm`/`remove`
+  on a pending-entries queue), not `useOptimistic`: `useOptimistic` requires
+  being called inside an *active transition*, and `enqueue` must be called
+  **outside** `Calculator`'s `startTransition` to show immediately — a plain
+  `setState` called *inside* a transition is deferred along with everything
+  else in it (only `useOptimistic` setters are special-cased to bypass that),
+  so doing so would silently hold the optimistic entry back until the whole
+  calculation settles. A queue is also just easier to reason about
+  end-to-end: `remove` on failure is an explicit call, not an implicit
+  revert.
 - **Styling with StyleX.** Component styles live in `stylex.create()` calls
   colocated with the component (see `Calculator.tsx`) and compile to atomic,
   deduplicated CSS at build time via `@stylexjs/unplugin` — no runtime
@@ -134,10 +148,17 @@ quietly computing it itself:
 { "a": "10", "b": "4" }
 ```
 
-Success response (`200`):
+Success response (`200`) — `history` is the record this calculation was
+just written as, or `null` if it wasn't (no store configured, or the insert
+failed — history recording is best-effort and never fails the calculation
+itself). The frontend uses this to update the shared history list
+immediately instead of waiting for a separate `/history` fetch:
 
 ```json
-{ "result": "14" }
+{
+  "result": "14",
+  "history": { "id": "…", "operations": "10 + 4", "result": "14", "createdAt": "2026-01-01T00:00:00Z" }
+}
 ```
 
 Error response (`400`, e.g. division by zero, negative square root, a

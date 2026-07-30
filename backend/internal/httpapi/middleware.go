@@ -7,14 +7,22 @@ import (
 	"time"
 )
 
+// allowedOrigin is the origin this API accepts cross-origin requests from —
+// both browser CORS on the REST endpoints and origin verification on the
+// WebSocket handshake. Configurable via ALLOWED_ORIGIN so it can be locked
+// down in production; "*" (the default) accepts any origin.
+func allowedOrigin() string {
+	if v := os.Getenv("ALLOWED_ORIGIN"); v != "" {
+		return v
+	}
+	return "*"
+}
+
 // withCORS allows the frontend (served from a different origin during local
 // development) to call the API. The allowed origin is configurable via the
 // ALLOWED_ORIGIN env var so it can be locked down in production.
 func withCORS(next http.Handler) http.Handler {
-	allowedOrigin := os.Getenv("ALLOWED_ORIGIN")
-	if allowedOrigin == "" {
-		allowedOrigin = "*"
-	}
+	allowedOrigin := allowedOrigin()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)

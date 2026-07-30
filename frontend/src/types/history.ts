@@ -5,7 +5,6 @@ export interface HistoryEntry {
   createdAt: string;
 }
 
-// nextCursor is null once there are no more pages.
 export interface HistoryPage {
   items: HistoryEntry[];
   nextCursor: string | null;

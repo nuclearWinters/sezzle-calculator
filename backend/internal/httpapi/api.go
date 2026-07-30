@@ -13,7 +13,8 @@ import (
 // `go test ./...` to run.
 type HistoryStore interface {
 	Insert(ctx context.Context, operations, result string) (history.Entry, error)
-	List(ctx context.Context, cursor *int64, limit int) ([]history.Entry, *int64, error)
+	List(ctx context.Context, cursor *history.Cursor, limit int) ([]history.Entry, *history.Cursor, error)
+	ListSince(ctx context.Context, cursor *history.Cursor) ([]history.Entry, error)
 }
 
 // API holds the dependencies HTTP handlers need. History may be nil — see
