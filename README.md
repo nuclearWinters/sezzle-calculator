@@ -1,10 +1,13 @@
 # Sezzle Calculator
 
-A full-stack calculator: a Go REST API performs every calculation, and a
-React + TypeScript frontend provides the UI. No arithmetic happens in the
-browser — the frontend only collects input and renders whatever the backend
-returns. Every successful calculation is recorded to MySQL and browsable as
-an infinite-scrolling history feed.
+A full-stack calculator: a Go REST API performs every calculation
+authoritatively, and a React + TypeScript frontend provides the UI. The
+frontend does compute a local optimistic result (via `decimal.js`) so the
+display updates instantly, but that value is always replaced by whatever
+the backend returns once the request settles — the backend result is the
+only one that's ever persisted or treated as final. Every successful
+calculation is recorded to MySQL and browsable as an infinite-scrolling
+history feed.
 
 ```
 sezzle-calculator/
@@ -49,11 +52,14 @@ sezzle-calculator/
 - **One generic endpoint vs. one-per-operation.** `POST /api/v1/calculate/{operation}`
   keeps the handler and validation logic in one place while still reading as
   a clear, RESTful path per operation.
-- **Cursor-based history pagination.** `history` rows have an internal
-  auto-increment `seq` used purely for stable pagination ordering
-  (`WHERE seq < ? ORDER BY seq DESC`), separate from the public UUID `id`
-  clients see. The frontend never needs to understand this — it just passes
-  back whatever opaque `nextCursor` string the previous page returned.
+- **Cursor-based history pagination.** Pages are seeked by the composite key
+  `(created_at, id)` (`WHERE (created_at, id) < (?, ?) ORDER BY created_at
+  DESC, id DESC`) rather than `id` alone, since `created_at` on its own can
+  collide under fast concurrent inserts (see `db/schema.sql`). The cursor
+  sent to clients is just that pair packed into one opaque string
+  (`formatCursor`/`parseCursor` in `internal/httpapi/history_handlers.go`)
+  — the frontend never needs to understand its structure, it just passes
+  back whatever `nextCursor` the previous page returned.
 - **Mocked flakiness.** Every `/calculate` and `/history` request is delayed
   1-3s and fails outright ~10% of the time (`internal/httpapi/flakiness.go`),
   to exercise real loading/error states in the frontend instead of talking to
@@ -65,20 +71,38 @@ sezzle-calculator/
   MySQL: `CalculateHandler` logs (and swallows) history-insert failures
   rather than failing the response, and the server itself starts even if it
   can't reach MySQL at boot (it just runs without history).
-- **Shared history via a Context, updated as a plain queue — not `useOptimistic`.**
-  `Calculator` and `History` both read/write one list through
-  `HistoryContext`. A completed calculation's `history` record (see above)
-  is appended immediately rather than waiting for the next `/history`
-  fetch/scroll. This is deliberately plain `useState` (`enqueue`/`confirm`/`remove`
-  on a pending-entries queue), not `useOptimistic`: `useOptimistic` requires
-  being called inside an *active transition*, and `enqueue` must be called
-  **outside** `Calculator`'s `startTransition` to show immediately — a plain
-  `setState` called *inside* a transition is deferred along with everything
-  else in it (only `useOptimistic` setters are special-cased to bypass that),
-  so doing so would silently hold the optimistic entry back until the whole
-  calculation settles. A queue is also just easier to reason about
-  end-to-end: `remove` on failure is an explicit call, not an implicit
-  revert.
+- **The history sync socket as a resumable, cursor-based catch-up.**
+  `GET /api/v1/history/sync` borrows the core idea from [resumable GraphQL
+  subscriptions](https://blog.platformatic.dev/resumable-graphql-subscriptions):
+  instead of the client re-fetching everything or the server tracking
+  per-connection state, the client just says "send me what's changed since
+  cursor X" and the server replays only that gap. Here the gap being closed
+  is small and one-shot by design — the interval between the initial
+  paginated `/history` fetch and the socket connecting.
+- **Shared history via a Context, using `useOptimistic`.** `Calculator` and
+  `History` both read/write one list through `HistoryContext`
+  (`HistoryProvider.tsx`). When a calculation is submitted,
+  `optimisticUpdate` immediately prepends a placeholder entry via
+  `useOptimistic` inside a `startTransition`, so it shows in the shared list
+  before the backend responds. Once the request settles, the real
+  `history` record from the response (see above) replaces the placeholder
+  in committed state; if it fails, the transition simply ends without
+  committing anything and the placeholder disappears (a failure also
+  triggers an `alert()` so it isn't silent). `Calculator` uses the same
+  `useOptimistic`/`startTransition` pattern for its own optimistic
+  result/equation line, computed locally by `opSwitch` (see above) ahead of
+  the backend's answer.
+- **Separate error and Suspense boundaries per panel.** `App.tsx` wraps
+  `History` and `Calculator` in their own `ErrorBoundary` (labeled `"History"`
+  / `"Calculator"`), so a crash in one panel can't take the other down with
+  it. Retrying clears the caught error and bumps a `resetKey` that's passed
+  back in as the child's `key` (via `cloneElement`), forcing a full
+  unmount/remount to shed whatever bad state caused the crash. Only the
+  `History` panel gets a `Suspense` boundary (`HistoryLoading` as
+  fallback), since `History` calls `use(historyPromise)`, which suspends
+  while the initial page is in flight; `Calculator` never suspends — its
+  async work goes through `startTransition`/`useOptimistic` (see above), not
+  `use()` — so it needs no Suspense boundary of its own.
 - **Styling with StyleX.** Component styles live in `stylex.create()` calls
   colocated with the component (see `Calculator.tsx`) and compile to atomic,
   deduplicated CSS at build time via `@stylexjs/unplugin` — no runtime
@@ -86,9 +110,10 @@ sezzle-calculator/
   global concerns (the `<body>` reset) stay in a small `index.css` since
   StyleX only ever styles React-rendered elements, not the document itself.
 - **Frontend state machine.** The `Calculator` component tracks
-  `previousOperand` / `pendingOperation` / `overwrite` the way a physical
-  calculator does, so operators can be chained (`2 + 3 + 4 =`) and the
-  unary `√` button applies immediately to whatever is on screen.
+  `firstNumber` / `secondNumber` / `operation` (plus `lastOperation` /
+  `lastOperand` to support repeating `=`) the way a physical calculator
+  does, so operators can be chained (`2 + 3 + 4 =`) and the unary `√`
+  button applies immediately to whatever is on screen.
 - **Responsive keypad.** The card width (`min(360px, calc(100vw - 32px))`)
   and the keypad's grid columns (`1fr` instead of a fixed px) let the
   calculator shrink to fit narrow phone viewports instead of overflowing;
@@ -114,8 +139,9 @@ go run ./cmd/server
 The server starts on `:8080` (override with the `PORT` env var). CORS origin
 defaults to `*`; set `ALLOWED_ORIGIN` to lock it down in production.
 
-`internal/history`'s own tests talk to a real MySQL and are skipped unless
-`TEST_DB_DSN` is set:
+`internal/history`'s `go-sqlmock`-based unit tests run as part of `go test
+./...` above with no setup needed. Its `history_test.go` integration tests
+talk to a real MySQL instead, and are skipped unless `TEST_DB_DSN` is set:
 
 ```bash
 docker compose up -d mysql
@@ -182,8 +208,18 @@ Error response (`400`, e.g. division by zero, negative square root, a
 }
 ```
 
-`nextCursor` is `null` once there are no more pages. `503` if MySQL isn't
-reachable.
+`nextCursor` is `null` once there are no more pages. `503` if no history
+store could be established at server startup (a later, mid-flight MySQL
+outage instead surfaces as `500`).
+
+`GET /api/v1/history/sync` — WebSocket, one-shot resumable catch-up (see
+design rationale below). The client sends one JSON message,
+`{"cursor": <the nextCursor to resume from, or null for everything>}`, and
+the server replies with every entry created after that cursor (oldest
+first), then closes the connection normally — it does not stay open
+pushing further live updates. Used by the frontend (`useHistorySync`) right
+after the initial `/history` page loads, to pick up any entry inserted in
+the gap between that fetch and the socket connecting.
 
 Example:
 
@@ -234,15 +270,25 @@ docker compose -f docker-compose.dev.yml up
   operation, including division-by-zero, negative-square-root, and
   pathologically-large-`power` edge cases, plus regressions for exact
   large-magnitude arithmetic (e.g. `1e30 - 1e20`) that a `float64` would
-  round. `internal/history` has MySQL-backed integration tests (see above).
-  `internal/httpapi` has `httptest`-based handler tests — including history
-  recording/pagination against an in-memory fake `HistoryStore` — and a full
-  router end-to-end test.
-- **Frontend:** `Calculator.test.tsx` mocks `fetch` to verify the component
-  sends the right request body, renders the backend's result, surfaces
-  backend error messages instead of crashing, and rejects invalid input
-  before it ever reaches the API. `History.test.tsx` mocks `fetch` and
-  `IntersectionObserver` to verify the first page loads on mount, scrolling
-  the sentinel into view fetches the next page with the right cursor, and a
-  failed page load shows a retry option. Run `npm run test:coverage` for a
-  per-file breakdown.
+  round. `internal/history` is unit-tested against `go-sqlmock`
+  (`history_sqlmock_test.go`, no real database needed) covering pagination,
+  cursor math, and exec/query/scan error paths, plus separate MySQL-backed
+  integration tests (`history_test.go`, gated on `TEST_DB_DSN`, see above).
+  `internal/httpapi` has `httptest`-based handler tests — history
+  recording/pagination against an in-memory fake `HistoryStore`, CORS and
+  cursor-parsing edge cases, the websocket sync handler, the
+  simulated-flakiness middleware (its randomness/sleep are overridable so
+  tests are deterministic and instant), and a full router end-to-end test.
+  Current coverage: ~88% overall (100% `calculator`, ~97% `history`, ~99%
+  `httpapi`).
+- **Frontend:** every component, hook, and API module has a dedicated test
+  file under `src/`. `Calculator.test.tsx` mocks `fetch` to verify request
+  bodies, backend-result rendering, error handling, precision edge cases,
+  and the optimistic result/history flow. `History.test.tsx` and
+  `HistoryProvider.test.tsx` mock `fetch` and `IntersectionObserver` to
+  cover pagination, retry-on-error, and the optimistic-update logic
+  (including races against an in-flight initial load).
+  `useHistorySync.test.ts` mocks `WebSocket` to cover the sync hook's
+  lifecycle. `App.test.tsx` covers the calculator and history panels wired
+  together end-to-end. Run `npm run test:coverage` for a per-file breakdown
+  (currently ~93% statements).
