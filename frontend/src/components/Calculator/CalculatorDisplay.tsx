@@ -13,7 +13,7 @@ const styles = stylex.create({
     padding: "20px 16px",
     marginBottom: "16px",
     textAlign: "right",
-    height: "84px",
+    height: "94px",
     display: "flex",
     flexDirection: "column",
     justifyContent: "flex-end",
@@ -26,19 +26,11 @@ const styles = stylex.create({
   },
   value: {
     color: colors.valueText,
-    // fontSize is set inline (see valueFontSize) since it depends on the
-    // rendered text length, not just viewport width — results can range
-    // from a single digit to 50+ characters now that we show full
-    // precision instead of rounding.
     fontWeight: 600,
     wordBreak: "break-all",
   },
 });
 
-// Shrinks the main display's font as its text gets longer, so results
-// ranging from a single digit up to 50+ characters (full-precision decimals)
-// all stay on one line-ish instead of overflowing or wrapping illegibly.
-// Ordered shortest-first; the first breakpoint that fits wins.
 const VALUE_FONT_SIZES: ReadonlyArray<{ maxLength: number; fontSize: string }> = [
   { maxLength: 10, fontSize: "clamp(1.75rem, 8vw, 2.5rem)" },
   { maxLength: 16, fontSize: "clamp(1.4rem, 6.5vw, 2rem)" },

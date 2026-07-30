@@ -16,6 +16,9 @@ const styles = stylex.create({
     borderBottom: `1px solid ${colors.cardBorder}`,
     fontSize: "0.9rem",
   },
+  optimistic: {
+    opacity: 0.5,
+  },
   operations: {
     color: colors.historyText,
     overflow: "hidden",
@@ -39,8 +42,10 @@ interface Props {
 }
 
 export default function HistoryListItem({ entry }: Props) {
+  const isOptimistic = entry.id.startsWith("mock-");
+
   return (
-    <li {...stylex.props(styles.item)}>
+    <li {...stylex.props(styles.item, isOptimistic && styles.optimistic)}>
       <span {...stylex.props(styles.operations)} title={formatTimestamp(entry.createdAt)}>
         {entry.operations} =
       </span>

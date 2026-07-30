@@ -11,15 +11,11 @@ const styles = stylex.create({
   stack: {
     display: "flex",
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "stretch",
     justifyContent: "center",
     flexWrap: "wrap",
     gap: "16px",
   },
-  // There's no room for a side-by-side history panel on a small (roughly
-  // phone-width) screen, so it's dropped rather than squeezed in.
-  // `display: contents` in the non-hidden case keeps this wrapper from
-  // affecting the flex layout — History's own card still sizes itself.
   historyPanel: {
     display: {
       default: "contents",

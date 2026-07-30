@@ -17,6 +17,7 @@ const colors = {
 const styles = stylex.create({
   card: {
     width: "min(360px, calc(100vw - 32px))",
+    height: "456px",
     backgroundColor: colors.cardBg,
     border: `1px solid ${colors.cardBorder}`,
     borderRadius: "20px",
@@ -27,7 +28,7 @@ const styles = stylex.create({
     listStyle: "none",
     margin: 0,
     padding: 0,
-    maxHeight: "280px",
+    maxHeight: "360px",
     overflowY: "auto",
   },
 });

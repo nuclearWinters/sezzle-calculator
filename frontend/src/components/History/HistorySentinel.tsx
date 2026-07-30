@@ -11,8 +11,6 @@ interface Props {
   ref: Ref<HTMLDivElement>;
 }
 
-// An invisible marker observed via IntersectionObserver — when it scrolls
-// into view, the parent knows to load the next page.
 export default function HistorySentinel({ ref }: Props) {
   return <div ref={ref} {...stylex.props(styles.sentinel)} data-testid="history-sentinel" />;
 }

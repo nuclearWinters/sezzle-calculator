@@ -20,8 +20,7 @@ function renderHistory() {
   );
 }
 
-// Controllable IntersectionObserver: captures each instance's callback so
-// tests can simulate the sentinel scrolling into view via triggerIntersection().
+
 let intersectionCallbacks: IntersectionObserverCallback[] = [];
 
 class MockIntersectionObserver implements IntersectionObserver {
@@ -129,9 +128,7 @@ describe("History", () => {
 
     await waitFor(() => expect(screen.getByText("2 + 2 =")).toBeInTheDocument());
     expect(secondPage).toHaveBeenCalledWith(expect.stringContaining("cursor=5"));
-    // Appended, not replaced.
     expect(screen.getByText("1 + 1 =")).toBeInTheDocument();
-    // No more pages once nextCursor comes back null.
     expect(screen.queryByTestId("history-sentinel")).not.toBeInTheDocument();
   });
 

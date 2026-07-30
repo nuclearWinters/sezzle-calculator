@@ -7,12 +7,6 @@ function Safe() {
   return <p data-testid="safe">All good</p>;
 }
 
-// A component whose throw/no-throw behavior is controlled externally by the
-// test (not by counting renders) — React 19 internally re-invokes a
-// throwing component more than once before calling componentDidCatch, so
-// asserting on an invocation count is unreliable. This flag-based approach
-// keeps throwing until the test explicitly flips it, regardless of how many
-// times React calls the function in between.
 function makeFlakyComponent() {
   const state = { shouldThrow: true };
   function Flaky() {
@@ -37,8 +31,6 @@ describe("ErrorBoundary", () => {
   });
 
   it("catches a thrown error and shows the fallback with the label and message", () => {
-    // React (and our boundary) logs the caught error via console.error by
-    // design — suppress the expected noise for this test.
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const { Flaky } = makeFlakyComponent();
 

@@ -38,12 +38,7 @@ const styles = stylex.create({
 });
 
 interface Props {
-  // A single element, not arbitrary ReactNode — retrying clones it with a
-  // new `key` to force React to fully unmount + remount it (re-running its
-  // state initializers, effects, and any in-flight requests) rather than
-  // just re-rendering the same instance.
   children: ReactElement;
-  // Shown in the fallback message and console log, e.g. "History".
   label: string;
 }
 

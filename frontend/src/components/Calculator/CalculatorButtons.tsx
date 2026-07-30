@@ -31,8 +31,6 @@ const colors = {
 const styles = stylex.create({
   keypad: {
     display: "grid",
-    // Fractional columns (rather than a fixed px width) let the keypad
-    // shrink to fit narrow phone screens instead of overflowing.
     gridTemplateColumns: "repeat(4, 1fr)",
     gap: "10px",
     width: "100%",
@@ -43,7 +41,6 @@ const styles = stylex.create({
     borderWidth: "0px",
     borderRadius: "100px",
     width: "100%",
-    // 44px is the standard minimum touch-target size for mobile.
     height: "44px",
     display: "flex",
     alignItems: "center",
@@ -71,14 +68,9 @@ const styles = stylex.create({
     color: colors.equalsText,
     fontWeight: 700,
   },
-  // The "=" key spans 3 grid columns; grid items stretch to fill their
-  // area by default, so it just needs the column span.
   wide: {
     gridColumn: "span 3",
   },
-  // "EXP" doesn't fit comfortably on a small (roughly phone-width) screen's
-  // narrow keys, so it shortens to "E" there — same breakpoint as the
-  // history panel in App.tsx.
   fullLabel: {
     display: {
       default: "inline",

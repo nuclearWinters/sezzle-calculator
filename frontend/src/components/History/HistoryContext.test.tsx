@@ -16,13 +16,8 @@ function mockFetchOnce(status: number, body: unknown) {
 const entryA: HistoryEntry = { id: "a", operations: "1 + 1", result: "2", createdAt: "2026-01-01T00:00:00Z" };
 const entryB: HistoryEntry = { id: "b", operations: "2 + 2", result: "4", createdAt: "2026-01-01T00:01:00Z" };
 
-// A minimal consumer exposing enqueue/confirm/remove as buttons, so the
-// queue's own semantics can be tested independently of Calculator/History.
 function QueueHarness() {
   const { entries, enqueue, confirm, remove } = useHistoryContext();
-  // A ref (not a plain variable) since this component re-renders every time
-  // the queue changes, which would otherwise reset a plain `let` back to
-  // null before the confirm/remove buttons below ever got clicked.
   const pendingId = useRef<string | null>(null);
 
   return (

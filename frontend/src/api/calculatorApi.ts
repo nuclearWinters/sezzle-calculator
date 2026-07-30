@@ -9,17 +9,9 @@ export class CalculatorApiError extends Error {}
 
 export interface CalculateResult {
   result: Decimal;
-  // The history record this calculation was just recorded as, or null if
-  // it wasn't (history recording is best-effort on the backend).
   historyItem: HistoryEntry | null;
 }
 
-/**
- * Calls the backend calculator API. `b` is omitted for unary operations
- * (currently "sqrt" and "identity"). Operands and the result travel as
- * decimal strings (Decimal's `toJSON`/our own `new Decimal(...)` parse),
- * never as JSON numbers, so precision survives the round trip.
- */
 export async function calculate(operation: Operation, a: Decimal, b?: Decimal): Promise<CalculateResult> {
   let response: Response;
 
@@ -47,10 +39,6 @@ export async function calculate(operation: Operation, a: Decimal, b?: Decimal): 
   return { result: new Decimal(data.result), historyItem: data.history ?? null };
 }
 
-// `history` being entirely absent is treated the same as an explicit null —
-// the real backend always includes it, but staying lenient here keeps this
-// check from being pointlessly strict about a field callers already treat
-// as optional (see the `?? null` above).
 function isCalculateResponse(data: unknown): data is CalculateResponse {
   if (typeof data !== "object" || data === null) return false;
   const response = data as CalculateResponse;

@@ -6,9 +6,6 @@ import History from "../History/History";
 import HistoryProvider from "../History/HistoryContext";
 import { mockFetchRoutes } from "../../test/mockFetch";
 
-// Mounting <Calculator/> now also mounts its HistoryProvider ancestor,
-// which fires a /history GET on mount — routed harmlessly to an empty page
-// here since these tests only care about /calculate responses.
 function mockFetchOnce(status: number, body: unknown) {
   return mockFetchRoutes({
     calculate: { status, body },
@@ -24,8 +21,6 @@ function renderCalculator() {
   );
 }
 
-// For tests that need to see the shared history list update in response to
-// a calculation, not just Calculator's own display.
 function renderCalculatorWithHistory() {
   return render(
     <HistoryProvider>
@@ -325,8 +320,6 @@ describe("Calculator", () => {
 
     await user.click(screen.getByRole("button", { name: "√" }));
 
-    // The mount itself already fired one /history GET; sqrt being blocked
-    // just means it never adds a /calculate call on top of that.
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("/api/v1/calculate"), expect.anything());
     expect(screen.getByTestId("display")).toHaveTextContent("2 × 3");
   });
@@ -419,9 +412,6 @@ describe("Calculator", () => {
   });
 
   it("never rounds a result into looking like a different, 'cleaner' number", async () => {
-    // A value one-tenth shy of 1e20 must never display as the round
-    // 100000000000000000000 — that would misrepresent it as exact when it
-    // isn't. The display shows the full value with no rounding step.
     vi.stubGlobal("fetch", mockFetchOnce(200, { result: "99999999999999999998.9" }));
 
     const user = userEvent.setup();
@@ -438,9 +428,6 @@ describe("Calculator", () => {
   });
 
   it("chains off a result without losing precision", async () => {
-    // The display always shows the full, exact value (no rounding), so
-    // chaining "× 3" off this result should send the exact 50-digit value
-    // back to the backend — not a truncated re-parse of a shortened display.
     const divideMock = mockFetchOnce(200, {
       result: "0.33333333333333333333333333333333333333333333333333",
     });
@@ -694,8 +681,6 @@ describe("Calculator", () => {
       "title",
       "Ans = 100000000000000000000000000000040",
     );
-    // Once a new expression is in progress, the raw display no longer maps
-    // to a single Decimal, so it shouldn't carry a stale tooltip.
     expect(screen.getByTestId("value")).not.toHaveAttribute("title");
   });
 
@@ -736,7 +721,6 @@ describe("Calculator", () => {
     await user.click(screen.getByRole("button", { name: "3" }));
     await user.click(screen.getByRole("button", { name: "=" }));
 
-    // Optimistic entry appears immediately — the backend hasn't responded yet.
     await waitFor(() => expect(screen.getByTestId("history-list")).toHaveTextContent("2 + 3"));
 
     resolveCalculate({
