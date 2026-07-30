@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -179,6 +180,37 @@ func TestCalculateHandlerInvalidJSON(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestCalculateHandlerPercentage(t *testing.T) {
+	rec, payload := doCalculate(t, "percentage", map[string]string{"a": "50", "b": "200"})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if payload["result"] != "100" {
+		t.Errorf("result = %v, want 100 (50%% of 200)", payload["result"])
+	}
+}
+
+func TestCalculateHandlerResultTooLargeWithoutAnIntrinsicOverflowError(t *testing.T) {
+	huge := strings.Repeat("9", 10001)
+
+	rec, payload := doCalculate(t, "identity", map[string]string{"a": huge})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if payload["error"] == nil {
+		t.Errorf("expected an error about a too-large result, got %v", payload)
+	}
+}
+
+func TestDispatchUnsupportedOperationReturnsError(t *testing.T) {
+	_, err := dispatch("bogus", CalculateRequest{})
+	if err == nil {
+		t.Fatal("dispatch() error = nil, want an error for an unsupported operation")
 	}
 }
 

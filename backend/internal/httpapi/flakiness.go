@@ -6,12 +6,18 @@ import (
 	"time"
 )
 
+var (
+	flakySleep       = time.Sleep
+	flakyRandIntN    = rand.IntN
+	flakyRandFloat64 = rand.Float64
+)
+
 func withMockedFlakiness(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		delay := time.Second + time.Duration(rand.IntN(2001))*time.Millisecond
-		time.Sleep(delay)
+		delay := time.Second + time.Duration(flakyRandIntN(2001))*time.Millisecond
+		flakySleep(delay)
 
-		if rand.Float64() < 0.10 {
+		if flakyRandFloat64() < 0.10 {
 			writeError(w, http.StatusInternalServerError, "simulated backend failure")
 			return
 		}

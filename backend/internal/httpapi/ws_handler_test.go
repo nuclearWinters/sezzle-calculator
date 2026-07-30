@@ -136,6 +136,55 @@ func TestHistorySyncHandlerNoStoreConfiguredClosesWithInternalError(t *testing.T
 	}
 }
 
+func TestHistorySyncHandlerAcceptFailureIsLoggedAndReturns(t *testing.T) {
+	api := &API{History: &fakeHistoryStore{}}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/history/sync", nil)
+
+	api.HistorySyncHandler(rec, req)
+}
+
+func TestHistorySyncHandlerMalformedJSONClosesWithPolicyViolation(t *testing.T) {
+	api := &API{History: &fakeHistoryStore{}}
+	server := httptest.NewServer(http.HandlerFunc(api.HistorySyncHandler))
+	defer server.Close()
+
+	conn := dialSync(t, server)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := conn.Write(ctx, websocket.MessageText, []byte("not json")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	var item HistoryItem
+	err := wsjson.Read(ctx, conn, &item)
+	if status := websocket.CloseStatus(err); status == -1 || status == websocket.StatusNormalClosure {
+		t.Errorf("close status = %v, want an abnormal close for a malformed JSON payload", status)
+	}
+}
+
+func TestWsAcceptOptionsWildcardOriginSkipsVerification(t *testing.T) {
+	t.Setenv("ALLOWED_ORIGIN", "")
+
+	opts := wsAcceptOptions()
+	if !opts.InsecureSkipVerify {
+		t.Error("InsecureSkipVerify = false, want true when no origin is configured")
+	}
+}
+
+func TestWsAcceptOptionsCustomOriginIsVerified(t *testing.T) {
+	t.Setenv("ALLOWED_ORIGIN", "https://example.com")
+
+	opts := wsAcceptOptions()
+	if opts.InsecureSkipVerify {
+		t.Error("InsecureSkipVerify = true, want false when a specific origin is configured")
+	}
+	if len(opts.OriginPatterns) != 1 || opts.OriginPatterns[0] != "https://example.com" {
+		t.Errorf("OriginPatterns = %v, want [https://example.com]", opts.OriginPatterns)
+	}
+}
+
 func TestHistorySyncHandlerStoreErrorClosesWithInternalError(t *testing.T) {
 	api := &API{History: &fakeHistoryStore{sinceErr: errors.New("boom")}}
 	server := httptest.NewServer(http.HandlerFunc(api.HistorySyncHandler))

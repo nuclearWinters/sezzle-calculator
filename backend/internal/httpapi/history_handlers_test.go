@@ -328,6 +328,26 @@ func TestListHistoryHandlerInvalidCursor(t *testing.T) {
 	}
 }
 
+func TestListHistoryHandlerCursorWithNonNumericTimestamp(t *testing.T) {
+	api := &API{History: &fakeHistoryStore{}}
+	rec := httptest.NewRecorder()
+	api.ListHistoryHandler(rec, httptest.NewRequest(http.MethodGet, "/api/v1/history?cursor=abc_5", nil))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestListHistoryHandlerCursorWithNonNumericID(t *testing.T) {
+	api := &API{History: &fakeHistoryStore{}}
+	rec := httptest.NewRecorder()
+	api.ListHistoryHandler(rec, httptest.NewRequest(http.MethodGet, "/api/v1/history?cursor=123_abc", nil))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
 func TestListHistoryHandlerNoStoreConfigured(t *testing.T) {
 	api := &API{}
 	rec := httptest.NewRecorder()
