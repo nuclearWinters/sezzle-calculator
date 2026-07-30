@@ -1,0 +1,70 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: calculator
+      MYSQL_USER: calculator
+      MYSQL_PASSWORD: calculator
+      MYSQL_ROOT_PASSWORD: calculator
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./db:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ucalculator", "-pcalculator"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: golang:1.23-alpine
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      ALLOWED_ORIGIN: "http://localhost:3000"
+      # air's toolchain requirement can outpace the base image's Go version;
+      # let `go install` fetch whatever toolchain it needs automatically.
+      GOTOOLCHAIN: "auto"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: calculator
+      DB_PASSWORD: calculator
+      DB_NAME: calculator
+    # air watches *.go files under /app and rebuilds+restarts the server
+    # on every change. Installed on container start so no custom image
+    # (and no Dockerfile) is needed.
+    command: sh -c "go install github.com/air-verse/air@latest && air -c .air.toml"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: "http://localhost:8080"
+      # Bind-mounted volumes (especially on Windows/macOS Docker Desktop)
+      # don't reliably deliver native fsnotify events, so fall back to
+      # polling for HMR to actually fire on file save.
+      CHOKIDAR_USEPOLLING: "true"
+    command: sh -c "npm install && npm run dev"
+    depends_on:
+      - backend
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
+  frontend-node-modules:
+  mysql-data:

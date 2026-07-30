@@ -1,0 +1,24 @@
+# Go
+/backend/bin/
+/backend/tmp/
+*.exe
+*.test
+coverage.out
+
+# Node
+**/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+*.tsbuildinfo
+frontend/vite.config.d.ts
+
+# Env
+.env
+.env.local
+
+# OS / editor
+.DS_Store
+*.log
+.vscode/
+.idea/

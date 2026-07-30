@@ -1,0 +1,20 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/main ./cmd/server"
+  bin = "./tmp/main"
+  full_bin = "./tmp/main"
+  include_ext = ["go"]
+  exclude_dir = ["tmp", "vendor"]
+  delay = 1000
+  # Polling is more reliable than fsnotify on bind-mounted volumes
+  # (notably Docker Desktop on Windows/macOS).
+  poll = true
+  poll_interval = 500
+
+[log]
+  time = false
+
+[misc]
+  clean_on_exit = true
