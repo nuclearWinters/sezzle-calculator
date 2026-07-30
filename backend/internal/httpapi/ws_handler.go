@@ -8,19 +8,10 @@ import (
 	"github.com/coder/websocket/wsjson"
 )
 
-// syncRequest is the single message a client sends immediately after the
-// handshake: the cursor of the newest entry it already has (a HistoryItem's
-// "cursor" field), or nil/"" to sync from the very start of history.
 type syncRequest struct {
 	Cursor *string `json:"cursor"`
 }
 
-// HistorySyncHandler implements GET /api/v1/history/sync: a one-shot
-// WebSocket backlog drain, not a live subscription. The client sends a
-// cursor, the server streams every entry newer than it — oldest to newest,
-// one HistoryItem JSON message each — then closes the connection. A caller
-// that wants to stay current reconnects (e.g. after receiving a new
-// calculation of its own) rather than holding the socket open.
 func (a *API) HistorySyncHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := websocket.Accept(w, r, wsAcceptOptions())
 	if err != nil {
@@ -69,9 +60,6 @@ func (a *API) HistorySyncHandler(w http.ResponseWriter, r *http.Request) {
 	conn.Close(websocket.StatusNormalClosure, "")
 }
 
-// wsAcceptOptions mirrors withCORS's origin policy for the WebSocket
-// handshake. "*" can't be used as an OriginPatterns entry (the library
-// special-cases it as a footgun), so it maps to InsecureSkipVerify instead.
 func wsAcceptOptions() *websocket.AcceptOptions {
 	origin := allowedOrigin()
 	if origin == "*" {

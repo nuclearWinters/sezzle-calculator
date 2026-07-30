@@ -14,8 +14,6 @@ import (
 	"sezzle-calculator/backend/internal/history"
 )
 
-// fakeHistoryStore is an in-memory HistoryStore used so these tests don't
-// need a live MySQL connection.
 type fakeHistoryStore struct {
 	inserted  []insertedEntry
 	insertErr error
@@ -199,8 +197,6 @@ func TestCalculateHandlerRecordsIdentityHistoryAsBareNumber(t *testing.T) {
 	if len(fake.inserted) != 1 {
 		t.Fatalf("history inserts = %d, want 1", len(fake.inserted))
 	}
-	// "the string operation will be the number itself" — no sqrt()-style
-	// wrapping, no operator symbol.
 	if fake.inserted[0].operations != "100" || fake.inserted[0].result != "100" {
 		t.Errorf("recorded = %+v, want operations=\"100\" result=\"100\"", fake.inserted[0])
 	}

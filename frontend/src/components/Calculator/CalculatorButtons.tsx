@@ -91,12 +91,14 @@ function Key({
   disabled,
   onClick,
   children,
+  ariaLabel,
 }: {
   variant: KeyVariant;
   wide?: boolean;
   disabled?: boolean;
   onClick: () => void;
   children: ReactNode;
+  ariaLabel?: string;
 }) {
   const variantStyle = variant === "number" ? styles.number : variant === "operator" ? styles.operator : styles.equals;
 
@@ -106,6 +108,7 @@ function Key({
       {...stylex.props(styles.key, variantStyle, wide && styles.wide)}
       onClick={onClick}
       disabled={disabled}
+      aria-label={ariaLabel}
     >
       {children}
     </button>
@@ -177,7 +180,7 @@ export default function CalculatorButtons({
         −
       </Key>
 
-      <Key variant="number" onClick={onExponent}>
+      <Key variant="number" onClick={onExponent} ariaLabel="EXP">
         <span {...stylex.props(styles.fullLabel)}>EXP</span>
         <span {...stylex.props(styles.shortLabel)}>E</span>
       </Key>

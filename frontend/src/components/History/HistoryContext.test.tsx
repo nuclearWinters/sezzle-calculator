@@ -1,8 +1,10 @@
-import { useRef } from "react";
-import { render, screen } from "@testing-library/react";
+import Decimal from "decimal.js";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import HistoryProvider, { useHistoryContext } from "./HistoryContext";
+import { fetchHistory } from "../../api/historyApi";
+import type { CalculateResult } from "../../api/calculatorApi";
 import type { HistoryEntry } from "../../types/history";
 
 function mockFetchOnce(status: number, body: unknown) {
@@ -13,44 +15,51 @@ function mockFetchOnce(status: number, body: unknown) {
   });
 }
 
-const entryA: HistoryEntry = { id: "a", operations: "1 + 1", result: "2", createdAt: "2026-01-01T00:00:00Z" };
-const entryB: HistoryEntry = { id: "b", operations: "2 + 2", result: "4", createdAt: "2026-01-01T00:01:00Z" };
+const optimisticEntry: HistoryEntry = {
+  id: "mock-1",
+  operations: "1 + 1",
+  result: "2 (pending)",
+  createdAt: "2026-01-01T00:00:00Z",
+};
+const realEntry: HistoryEntry = {
+  id: "real-1",
+  operations: "1 + 1",
+  result: "2",
+  createdAt: "2026-01-01T00:00:00Z",
+};
 
-function QueueHarness() {
-  const { entries, enqueue, confirm, remove } = useHistoryContext();
-  const pendingId = useRef<string | null>(null);
+function QueueHarness({ makeCalculatePromise }: { makeCalculatePromise: () => Promise<CalculateResult> }) {
+  const { entries, isLoading, optimisticUpdate } = useHistoryContext();
 
   return (
     <div>
+      {isLoading && <span data-testid="loading" />}
       <ul data-testid="entries">
-        {entries.map((entry) => (
+        {(entries ?? []).map((entry) => (
           <li key={entry.id}>
             {entry.operations} = {entry.result}
           </li>
         ))}
       </ul>
-      <button type="button" onClick={() => (pendingId.current = enqueue(entryA))}>
-        enqueue
-      </button>
-      <button type="button" onClick={() => pendingId.current && confirm(pendingId.current, entryB)}>
-        confirm
-      </button>
-      <button type="button" onClick={() => pendingId.current && remove(pendingId.current)}>
-        remove
+      <button type="button" onClick={() => optimisticUpdate(optimisticEntry, makeCalculatePromise())}>
+        calculate
       </button>
     </div>
   );
 }
 
-function renderHarness() {
-  return render(
-    <HistoryProvider>
-      <QueueHarness />
-    </HistoryProvider>,
-  );
+async function renderHarness(makeCalculatePromise: () => Promise<CalculateResult>) {
+  await act(async () => {
+    render(
+      <HistoryProvider historyPromise={fetchHistory(null, 20)}>
+        <QueueHarness makeCalculatePromise={makeCalculatePromise} />
+      </HistoryProvider>,
+    );
+  });
+  await waitFor(() => expect(screen.queryByTestId("loading")).not.toBeInTheDocument());
 }
 
-describe("HistoryContext queue", () => {
+describe("HistoryContext optimisticUpdate", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", mockFetchOnce(200, { items: [], nextCursor: null }));
   });
@@ -59,35 +68,53 @@ describe("HistoryContext queue", () => {
     vi.unstubAllGlobals();
   });
 
-  it("enqueue shows the entry immediately, without needing an active transition", async () => {
+  it("shows the entry immediately, before the calculation resolves", async () => {
     const user = userEvent.setup();
-    renderHarness();
+    let resolveCalculate!: (result: CalculateResult) => void;
+    const calculatePromise = new Promise<CalculateResult>((resolve) => {
+      resolveCalculate = resolve;
+    });
+    await renderHarness(() => calculatePromise);
 
-    await user.click(screen.getByRole("button", { name: "enqueue" }));
+    await user.click(screen.getByRole("button", { name: "calculate" }));
 
+    expect(screen.getByTestId("entries")).toHaveTextContent("1 + 1 = 2 (pending)");
+
+    resolveCalculate({ result: new Decimal(2), historyItem: realEntry });
+    await waitFor(() => expect(screen.getByTestId("entries")).not.toHaveTextContent("(pending)"));
+  });
+
+  it("replaces the optimistic entry with the real committed one once the calculation resolves", async () => {
+    const user = userEvent.setup();
+    let resolveCalculate!: (result: CalculateResult) => void;
+    const calculatePromise = new Promise<CalculateResult>((resolve) => {
+      resolveCalculate = resolve;
+    });
+    await renderHarness(() => calculatePromise);
+
+    await user.click(screen.getByRole("button", { name: "calculate" }));
+    expect(screen.getByTestId("entries")).toHaveTextContent("2 (pending)");
+
+    resolveCalculate({ result: new Decimal(2), historyItem: realEntry });
+
+    await waitFor(() => expect(screen.getByTestId("entries")).not.toHaveTextContent("(pending)"));
     expect(screen.getByTestId("entries")).toHaveTextContent("1 + 1 = 2");
   });
 
-  it("confirm replaces the pending entry with the real committed one", async () => {
+  it("reverts the optimistic entry if the calculation fails", async () => {
     const user = userEvent.setup();
-    renderHarness();
+    let rejectCalculate!: (err: Error) => void;
+    const calculatePromise = new Promise<CalculateResult>((_resolve, reject) => {
+      rejectCalculate = reject;
+    });
+    await renderHarness(() => calculatePromise);
 
-    await user.click(screen.getByRole("button", { name: "enqueue" }));
-    await user.click(screen.getByRole("button", { name: "confirm" }));
+    await user.click(screen.getByRole("button", { name: "calculate" }));
+    expect(screen.getByTestId("entries")).toHaveTextContent("2 (pending)");
 
-    const entries = screen.getByTestId("entries");
-    expect(entries).toHaveTextContent("2 + 2 = 4");
-    expect(entries).not.toHaveTextContent("1 + 1 = 2");
-  });
+    rejectCalculate(new Error("boom"));
 
-  it("remove drops the pending entry with nothing committed", async () => {
-    const user = userEvent.setup();
-    renderHarness();
-
-    await user.click(screen.getByRole("button", { name: "enqueue" }));
-    await user.click(screen.getByRole("button", { name: "remove" }));
-
-    expect(screen.getByTestId("entries")).toBeEmptyDOMElement();
+    await waitFor(() => expect(screen.getByTestId("entries")).toBeEmptyDOMElement());
   });
 
   it("useHistoryContext throws when used outside a HistoryProvider", () => {

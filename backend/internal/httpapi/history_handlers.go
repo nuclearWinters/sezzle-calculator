@@ -16,8 +16,6 @@ const (
 	maxHistoryLimit     = 100
 )
 
-// ListHistoryHandler dispatches GET /api/v1/history?cursor=&limit= requests,
-// returning a page of past calculations newest-first.
 func (a *API) ListHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	if a.History == nil {
 		writeError(w, http.StatusServiceUnavailable, "history is not available")
@@ -68,11 +66,6 @@ func toHistoryItem(e history.Entry) *HistoryItem {
 	return &HistoryItem{ID: strconv.FormatInt(e.ID, 10), Operations: e.Operations, Result: e.Result, CreatedAt: e.CreatedAt}
 }
 
-// formatCursor and parseCursor convert a history.Cursor to and from its
-// wire form: "<created_at as unix microseconds>_<id>". Shared by the
-// query-param cursor on GET /history and the JSON-payload cursor on the
-// history sync WebSocket — both endpoints seek the same (created_at, id)
-// keyset, just in opposite directions (see history.Store.List/ListSince).
 func formatCursor(cursor *history.Cursor) *string {
 	if cursor == nil {
 		return nil

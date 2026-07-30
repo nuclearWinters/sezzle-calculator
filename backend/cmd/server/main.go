@@ -1,4 +1,3 @@
-// Command server starts the calculator REST API.
 package main
 
 import (
@@ -30,14 +29,6 @@ func main() {
 	}
 }
 
-// openHistoryStore connects to MySQL using DB_* env vars (defaulting to
-// this project's docker-compose dev credentials). Retries briefly on
-// startup: the official MySQL image restarts its server process once after
-// running init scripts (db/schema.sql), so a fresh `docker compose up`
-// almost always hits a short connection-refused window even after
-// depends_on's healthcheck passes. Beyond that, history is best-effort — if
-// MySQL never comes up, the server still starts and just won't record/list
-// history rather than crash-looping the whole calculator over a DB outage.
 func openHistoryStore() httpapi.HistoryStore {
 	cfg := mysql.NewConfig()
 	cfg.Net = "tcp"

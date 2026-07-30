@@ -1,9 +1,12 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Suspense } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Calculator from "./Calculator";
 import History from "../History/History";
 import HistoryProvider from "../History/HistoryContext";
+import HistoryLoading from "../History/HistoryLoading";
+import { fetchHistory } from "../../api/historyApi";
 import { mockFetchRoutes } from "../../test/mockFetch";
 
 function mockFetchOnce(status: number, body: unknown) {
@@ -15,19 +18,23 @@ function mockFetchOnce(status: number, body: unknown) {
 
 function renderCalculator() {
   return render(
-    <HistoryProvider>
+    <HistoryProvider historyPromise={fetchHistory(null, 20)}>
       <Calculator />
     </HistoryProvider>,
   );
 }
 
-function renderCalculatorWithHistory() {
-  return render(
-    <HistoryProvider>
-      <Calculator />
-      <History />
-    </HistoryProvider>,
-  );
+async function renderCalculatorWithHistory() {
+  await act(async () => {
+    render(
+      <HistoryProvider historyPromise={fetchHistory(null, 20)}>
+        <Calculator />
+        <Suspense fallback={<HistoryLoading />}>
+          <History />
+        </Suspense>
+      </HistoryProvider>,
+    );
+  });
 }
 
 describe("Calculator", () => {
@@ -714,7 +721,7 @@ describe("Calculator", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const user = userEvent.setup();
-    renderCalculatorWithHistory();
+    await renderCalculatorWithHistory();
 
     await user.click(screen.getByRole("button", { name: "2" }));
     await user.click(screen.getByRole("button", { name: "+" }));
@@ -742,7 +749,7 @@ describe("Calculator", () => {
     );
 
     const user = userEvent.setup();
-    renderCalculatorWithHistory();
+    await renderCalculatorWithHistory();
 
     await user.click(screen.getByRole("button", { name: "5" }));
     await user.click(screen.getByRole("button", { name: "÷" }));

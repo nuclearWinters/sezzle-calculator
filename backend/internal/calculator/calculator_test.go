@@ -78,9 +78,6 @@ func TestPower(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Power(9, 0.5) returned unexpected error: %v", err)
 	}
-	// PowWithPrecision is an approximation algorithm, so even a perfect
-	// square like this can come back as e.g. 3.000...0001 far past the
-	// configured Precision — round before comparing.
 	if !got.Round(20).Equal(d("3")) {
 		t.Errorf("Power(9, 0.5) = %v, want 3", got)
 	}
@@ -126,9 +123,6 @@ func TestPercentage(t *testing.T) {
 	}
 }
 
-// TestSubtractExactAtLargeMagnitude regression-tests a case that silently
-// lost precision under float64: 1e30 - 1e20 rounded to 9.999999999e+29
-// instead of the exact answer.
 func TestSubtractExactAtLargeMagnitude(t *testing.T) {
 	got := Subtract(d("1e30"), d("1e20"))
 	want := d("999999999900000000000000000000")
@@ -137,9 +131,6 @@ func TestSubtractExactAtLargeMagnitude(t *testing.T) {
 	}
 }
 
-// TestSubtractExactNearUnit regression-tests 1e21 - 1, which used to
-// silently round back to 1e21 under float64 (1 is smaller than the ULP at
-// that magnitude).
 func TestSubtractExactNearUnit(t *testing.T) {
 	got := Subtract(d("1e21"), d("1"))
 	want := d("999999999999999999999")
@@ -152,9 +143,6 @@ func TestIdentity(t *testing.T) {
 	if got := Identity(d("80")); !got.Equal(d("80")) {
 		t.Errorf("Identity(80) = %v, want 80", got)
 	}
-	// Confirms normalization happens at the decimal.Decimal parsing layer,
-	// not inside Identity itself — d("1e2") already equals d("100") once
-	// parsed.
 	if got := Identity(d("1e2")); !got.Equal(d("100")) {
 		t.Errorf("Identity(1e2) = %v, want 100", got)
 	}

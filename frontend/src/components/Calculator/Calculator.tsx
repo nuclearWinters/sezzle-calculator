@@ -31,8 +31,8 @@ const MAX_EXPONENT_DIGITS = 3;
 
 const operatorLabel: Record<BinaryOperation, string> = {
   add: "+",
-  subtract: "U+2212",
-  multiply: "U+00d7",
+  subtract: "−",
+  multiply: "×",
   divide: "÷",
   power: "^",
   percentage: "%",

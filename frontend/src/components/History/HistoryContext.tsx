@@ -10,7 +10,7 @@ interface HistoryContextValue {
   hasMore: boolean;
   isLoading: boolean;
   error: string | null;
-  historyPromise: Promise<HistoryPage>;
+  historyPromise: Promise<unknown>;
   loadMore: () => void;
   optimisticUpdate: (entry: HistoryEntry, calculatePromise: Promise<CalculateResult>) => void
   syncCursor: string | null | undefined
@@ -34,8 +34,12 @@ interface ProviderProps {
 
 export default function HistoryProvider({ children, historyPromise }: ProviderProps) {
   const [history] = useState(() => historyPromise)
+  const [suspenseSignal] = useState(() => history.catch(() => undefined))
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
-  const [entriesOpt, setEntriesOpt] = useOptimistic(entries)
+  const [entriesOpt, setEntriesOpt] = useOptimistic(
+    entries,
+    (entries: HistoryEntry[] | null, entry: HistoryEntry) => (entries ? [entry, ...entries] : entries),
+  )
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [syncCursor, setSyncCursor] = useState<string | null | undefined>(undefined);
   const [hasMore, setHasMore] = useState(false);
@@ -46,7 +50,7 @@ export default function HistoryProvider({ children, historyPromise }: ProviderPr
 
   const optimisticUpdate = (entry: HistoryEntry, calculatePromise: Promise<CalculateResult>) => {
     startTransition(async () => {
-      setEntriesOpt(entries => entries ? [entry, ...entries] : entries)
+      setEntriesOpt(entry)
       try {
         const { historyItem } = await calculatePromise
         if (!historyItem) throw new Error("History item not recived.")
@@ -105,7 +109,7 @@ export default function HistoryProvider({ children, historyPromise }: ProviderPr
     hasMore,
     isLoading,
     error,
-    historyPromise: history,
+    historyPromise: suspenseSignal,
     loadMore,
     optimisticUpdate,
     syncCursor,

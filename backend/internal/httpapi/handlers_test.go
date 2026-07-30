@@ -129,9 +129,6 @@ func TestCalculateHandlerAcceptsScientificNotationInRequestBody(t *testing.T) {
 	}
 }
 
-// TestCalculateHandlerExactSubtractionAtLargeMagnitude regression-tests the
-// end-to-end request/response cycle for a case that silently lost precision
-// under float64 (1e30 - 1e20 used to round to 9.999999999e+29).
 func TestCalculateHandlerExactSubtractionAtLargeMagnitude(t *testing.T) {
 	rec, payload := doCalculate(t, "subtract", map[string]string{"a": "1e30", "b": "1e20"})
 

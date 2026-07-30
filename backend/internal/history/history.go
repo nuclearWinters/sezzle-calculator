@@ -1,7 +1,3 @@
-// Package history persists completed calculations to MySQL and lists them
-// back with cursor-based pagination. Plain database/sql — no ORM, matching
-// this project's stdlib-first approach elsewhere (see internal/calculator,
-// internal/httpapi).
 package history
 
 import (
@@ -13,9 +9,6 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
-// Entry is a single recorded calculation. ID is the table's auto-increment
-// primary key — it doubles as both the row's public identifier and (paired
-// with CreatedAt) its keyset pagination position; see Cursor.
 type Entry struct {
 	ID         int64
 	Operations string
@@ -23,23 +16,15 @@ type Entry struct {
 	CreatedAt  time.Time
 }
 
-// Cursor identifies a position in the history table's (created_at, id)
-// keyset ordering. created_at alone isn't a safe seek key — two rows can
-// share the same microsecond under fast concurrent inserts — so id
-// (monotonic, always unique) breaks the tie.
 type Cursor struct {
 	CreatedAt time.Time
 	ID        int64
 }
 
-// Store persists calculation history to MySQL.
 type Store struct {
 	db *sql.DB
 }
 
-// Open connects to MySQL using cfg and verifies the connection with a ping.
-// ParseTime and Loc are forced to UTC regardless of what cfg specifies,
-// since List/Insert depend on scanning created_at directly into time.Time.
 func Open(cfg mysql.Config) (*Store, error) {
 	cfg.ParseTime = true
 	cfg.Loc = time.UTC
@@ -57,13 +42,10 @@ func Open(cfg mysql.Config) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// Close releases the underlying connection pool.
 func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// Insert records a completed calculation and returns the stored entry,
-// including the id MySQL assigned it.
 func (s *Store) Insert(ctx context.Context, operations, result string) (Entry, error) {
 	entry := Entry{
 		Operations: operations,
@@ -89,10 +71,6 @@ func (s *Store) Insert(ctx context.Context, operations, result string) (Entry, e
 	return entry, nil
 }
 
-// List returns up to limit entries strictly before cursor in (created_at,
-// id) order (a nil cursor starts from the most recent entry), newest
-// first, plus the cursor to pass in order to fetch the next page (nil if
-// there isn't one).
 func (s *Store) List(ctx context.Context, cursor *Cursor, limit int) ([]Entry, *Cursor, error) {
 	query := `SELECT id, operations, result, created_at FROM history`
 	args := []any{}
@@ -101,8 +79,6 @@ func (s *Store) List(ctx context.Context, cursor *Cursor, limit int) ([]Entry, *
 		args = append(args, cursor.CreatedAt, cursor.ID)
 	}
 	query += ` ORDER BY created_at DESC, id DESC LIMIT ?`
-	// Fetch one extra row so we know whether a next page exists without a
-	// separate COUNT query.
 	args = append(args, limit+1)
 
 	fetched, err := s.query(ctx, query, args...)
@@ -120,13 +96,6 @@ func (s *Store) List(ctx context.Context, cursor *Cursor, limit int) ([]Entry, *
 	return fetched, nextCursor, nil
 }
 
-// ListSince returns every entry strictly after cursor in (created_at, id)
-// order (a nil cursor starts from the very beginning of history), oldest
-// first. It's the same keyset-seek query as List — same cursor, same
-// table, same (created_at, id) key — just walking the opposite direction:
-// List seeks backward (newest first) to paginate through history already
-// seen, while ListSince seeks forward (oldest first) to replay whatever's
-// been added since.
 func (s *Store) ListSince(ctx context.Context, cursor *Cursor) ([]Entry, error) {
 	query := `SELECT id, operations, result, created_at FROM history`
 	args := []any{}

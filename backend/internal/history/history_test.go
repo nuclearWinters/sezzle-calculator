@@ -8,10 +8,6 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
-// openTestStore connects to a real MySQL instance for integration testing.
-// Skipped unless TEST_DB_DSN is set — run `docker compose up -d mysql`
-// then `TEST_DB_DSN="calculator:calculator@tcp(127.0.0.1:3306)/calculator" go test ./...`
-// to actually exercise these.
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
 
@@ -94,8 +90,6 @@ func TestListPagination(t *testing.T) {
 		t.Fatalf("nextCursor2 = %v, want nil (no more pages)", *nextCursor2)
 	}
 
-	// Newest-first: the first page's entries must be strictly newer
-	// (higher seq, i.e. inserted later) than the second page's.
 	if firstPage[0].CreatedAt.Before(secondPage[0].CreatedAt) {
 		t.Errorf("firstPage[0].CreatedAt (%v) should not be before secondPage[0].CreatedAt (%v)",
 			firstPage[0].CreatedAt, secondPage[0].CreatedAt)
@@ -124,10 +118,6 @@ func TestListSinceFromBeginning(t *testing.T) {
 	}
 }
 
-// TestListSinceSharesCursorWithList proves ListSince and List share the
-// exact same cursor: List's nextCursor (the seek boundary of the oldest
-// entry on a backward page) fed straight into ListSince returns everything
-// on the other side of that same boundary, going forward instead of back.
 func TestListSinceSharesCursorWithList(t *testing.T) {
 	store := openTestStore(t)
 	ctx := context.Background()
@@ -149,7 +139,6 @@ func TestListSinceSharesCursorWithList(t *testing.T) {
 		t.Fatalf("List(nil, 1) = %+v, cursor = %v, want the newest entry with a cursor", page, cursor)
 	}
 
-	// A 4th entry arrives after that page was read.
 	fourth, err := store.Insert(ctx, "2 + 2", "4")
 	if err != nil {
 		t.Fatalf("Insert() error = %v", err)

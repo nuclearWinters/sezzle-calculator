@@ -12,10 +12,6 @@ import (
 	"sezzle-calculator/backend/internal/calculator"
 )
 
-// operationSymbols renders the plain-ASCII operator used in a history
-// entry's "operations" string (e.g. "10 + 4") — deliberately not the
-// frontend's Unicode glyphs (×, ÷, −), since this is backend-owned data,
-// not a UI rendering concern.
 var operationSymbols = map[string]string{
 	"add":        "+",
 	"subtract":   "-",
@@ -36,7 +32,6 @@ func describeOperation(operation string, req CalculateRequest) string {
 	}
 }
 
-// unaryOperations don't require a "b" field in the request body.
 var unaryOperations = map[string]bool{
 	"sqrt":     true,
 	"identity": true,
@@ -55,8 +50,6 @@ func HealthHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// CalculateHandler dispatches POST /api/v1/calculate/{operation} requests to
-// the matching calculator function and returns the result as JSON.
 func (a *API) CalculateHandler(w http.ResponseWriter, r *http.Request) {
 	operation := r.PathValue("operation")
 
@@ -85,8 +78,6 @@ func (a *API) CalculateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// History is best-effort: a working calculation must never fail just
-	// because logging it didn't work.
 	var historyItem *HistoryItem
 	if a.History != nil {
 		entry, insertErr := a.History.Insert(r.Context(), describeOperation(operation, req), result.String())

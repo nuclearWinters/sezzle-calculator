@@ -1,8 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Suspense } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import History from "./History";
 import HistoryProvider from "./HistoryContext";
+import HistoryLoading from "./HistoryLoading";
+import { fetchHistory } from "../../api/historyApi";
 
 function mockFetchOnce(status: number, body: unknown) {
   return vi.fn().mockResolvedValue({
@@ -12,12 +15,16 @@ function mockFetchOnce(status: number, body: unknown) {
   });
 }
 
-function renderHistory() {
-  return render(
-    <HistoryProvider>
-      <History />
-    </HistoryProvider>,
-  );
+async function renderHistory() {
+  await act(async () => {
+    render(
+      <HistoryProvider historyPromise={fetchHistory(null, 20)}>
+        <Suspense fallback={<HistoryLoading />}>
+          <History />
+        </Suspense>
+      </HistoryProvider>,
+    );
+  });
 }
 
 
@@ -57,17 +64,24 @@ describe("History", () => {
   });
 
   it("shows a loading state, then the first page once it resolves", async () => {
+    let resolveFetch!: (response: unknown) => void;
     vi.stubGlobal(
       "fetch",
-      mockFetchOnce(200, {
+      vi.fn().mockImplementation(() => new Promise((resolve) => (resolveFetch = resolve))),
+    );
+
+    await renderHistory();
+
+    expect(screen.getByTestId("history-loading")).toBeInTheDocument();
+
+    resolveFetch({
+      ok: true,
+      status: 200,
+      json: async () => ({
         items: [{ id: "1", operations: "1 + 2", result: "3", createdAt: "2026-01-01T00:00:00Z" }],
         nextCursor: null,
       }),
-    );
-
-    renderHistory();
-
-    expect(screen.getByTestId("history-loading")).toBeInTheDocument();
+    });
 
     await waitFor(() => expect(screen.getByText("1 + 2 =")).toBeInTheDocument());
     expect(screen.getByText("3")).toBeInTheDocument();
@@ -77,7 +91,7 @@ describe("History", () => {
   it("shows an empty state when there is no history", async () => {
     vi.stubGlobal("fetch", mockFetchOnce(200, { items: [], nextCursor: null }));
 
-    renderHistory();
+    await renderHistory();
 
     await waitFor(() => expect(screen.getByText("No calculations yet.")).toBeInTheDocument());
   });
@@ -86,7 +100,7 @@ describe("History", () => {
     vi.stubGlobal("fetch", mockFetchOnce(500, { error: "simulated backend failure" }));
 
     const user = userEvent.setup();
-    renderHistory();
+    await renderHistory();
 
     await waitFor(() =>
       expect(screen.getByTestId("history-error")).toHaveTextContent("simulated backend failure"),
@@ -114,7 +128,7 @@ describe("History", () => {
     });
     vi.stubGlobal("fetch", firstPage);
 
-    renderHistory();
+    await renderHistory();
     await waitFor(() => expect(screen.getByText("1 + 1 =")).toBeInTheDocument());
     expect(screen.getByTestId("history-sentinel")).toBeInTheDocument();
 
@@ -140,7 +154,7 @@ describe("History", () => {
     vi.stubGlobal("fetch", firstPage);
 
     const user = userEvent.setup();
-    renderHistory();
+    await renderHistory();
     await waitFor(() => expect(screen.getByText("1 + 1 =")).toBeInTheDocument());
 
     vi.stubGlobal("fetch", mockFetchOnce(500, { error: "simulated backend failure" }));

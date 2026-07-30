@@ -56,16 +56,16 @@ export default function History() {
     return () => observer.disconnect();
   }, [hasMore, error]);
 
-  if (!entries) return null
+  const items = entries ?? [];
 
   return (
     <div {...stylex.props(styles.card)} aria-label="Calculation history">
       <HistoryHeading />
 
-      {entries.length === 0 && !isLoading && !error && <HistoryEmpty />}
+      {items.length === 0 && !isLoading && !error && <HistoryEmpty />}
 
       <ul {...stylex.props(styles.list)} data-testid="history-list" ref={listRef}>
-        {entries.map((entry) => (
+        {items.map((entry) => (
           <HistoryListItem key={entry.id} entry={entry} />
         ))}
         {hasMore && !error && (

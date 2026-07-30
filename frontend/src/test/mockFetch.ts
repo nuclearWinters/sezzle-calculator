@@ -5,13 +5,6 @@ export interface MockResponse {
   body: unknown;
 }
 
-/**
- * Builds a mock `fetch` that dispatches to a different canned response
- * depending on which endpoint the request URL matches. `fallback` handles
- * any request that doesn't match an explicit route — e.g. a Calculator test
- * that doesn't care about the incidental /history GET a HistoryProvider
- * fires on mount, or a History test that never calls /calculate.
- */
 export function mockFetchRoutes(routes: { calculate?: MockResponse; history?: MockResponse; fallback: MockResponse }) {
   return vi.fn((input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();

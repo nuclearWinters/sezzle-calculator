@@ -5,11 +5,6 @@ const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
 export class HistoryApiError extends Error {}
 
-/**
- * Fetches a page of calculation history, newest first. Pass the previous
- * page's `nextCursor` to fetch the next one; omit `cursor` for the first
- * page. `nextCursor` is `null` on the response once there's nothing more.
- */
 export async function fetchHistory(cursor: string | null, limit?: number): Promise<HistoryPage> {
   const params = new URLSearchParams();
   if (cursor !== null) params.set("cursor", cursor);
