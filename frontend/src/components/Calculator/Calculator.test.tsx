@@ -761,4 +761,140 @@ describe("Calculator", () => {
     );
     expect(screen.getByText("No calculations yet.")).toBeInTheDocument();
   });
+
+  it("ignores a repeated leading zero", async () => {
+    const user = userEvent.setup();
+    renderCalculator();
+
+    await user.click(screen.getByRole("button", { name: "0" }));
+    await user.click(screen.getByRole("button", { name: "0" }));
+
+    expect(screen.getByTestId("display")).toHaveTextContent("0");
+  });
+
+  it("caps the number of digits that can be typed into an operand", async () => {
+    const user = userEvent.setup();
+    renderCalculator();
+
+    for (const digit of "123456789012345678901") {
+      await user.click(screen.getByRole("button", { name: digit }));
+    }
+    expect(screen.getByTestId("display")).toHaveTextContent("123456789012345678901");
+
+    await user.click(screen.getByRole("button", { name: "2" }));
+
+    expect(screen.getByTestId("display")).toHaveTextContent("123456789012345678901");
+  });
+
+  it("caps the number of digits in the exponent", async () => {
+    const user = userEvent.setup();
+    renderCalculator();
+
+    await user.click(screen.getByRole("button", { name: "1" }));
+    await user.click(screen.getByRole("button", { name: "EXP" }));
+    await user.click(screen.getByRole("button", { name: "1" }));
+    await user.click(screen.getByRole("button", { name: "2" }));
+    await user.click(screen.getByRole("button", { name: "3" }));
+    expect(screen.getByTestId("display")).toHaveTextContent("1e123");
+
+    await user.click(screen.getByRole("button", { name: "4" }));
+
+    expect(screen.getByTestId("display")).toHaveTextContent("1e123");
+  });
+
+  it("toggles the exponent sign when EXP is pressed again", async () => {
+    const user = userEvent.setup();
+    renderCalculator();
+
+    await user.click(screen.getByRole("button", { name: "1" }));
+    await user.click(screen.getByRole("button", { name: "EXP" }));
+    await user.click(screen.getByRole("button", { name: "2" }));
+    expect(screen.getByTestId("display")).toHaveTextContent("1e2");
+
+    await user.click(screen.getByRole("button", { name: "EXP" }));
+    expect(screen.getByTestId("display")).toHaveTextContent("1e-2");
+
+    await user.click(screen.getByRole("button", { name: "EXP" }));
+    expect(screen.getByTestId("display")).toHaveTextContent("1e2");
+  });
+
+  it("evaluates the pending operation immediately when a new operator is chosen with a second operand already typed", async () => {
+    const fetchMock = mockFetchOnce(200, { result: "8" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    renderCalculator();
+
+    await user.click(screen.getByRole("button", { name: "5" }));
+    await user.click(screen.getByRole("button", { name: "+" }));
+    await user.click(screen.getByRole("button", { name: "3" }));
+    await user.click(screen.getByRole("button", { name: "×" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/calculate/add"),
+        expect.objectContaining({ body: JSON.stringify({ a: "5", b: "3" }) }),
+      ),
+    );
+    await waitFor(() => expect(screen.getByTestId("display")).toHaveTextContent("8 ×"));
+  });
+
+  it("clears a negative carried-over first operand down to empty with repeated backspaces", async () => {
+    vi.stubGlobal("fetch", mockFetchOnce(200, { result: "-2" }));
+
+    const user = userEvent.setup();
+    renderCalculator();
+
+    await user.click(screen.getByRole("button", { name: "3" }));
+    await user.click(screen.getByRole("button", { name: "−" }));
+    await user.click(screen.getByRole("button", { name: "5" }));
+    await user.click(screen.getByRole("button", { name: "=" }));
+    await waitFor(() => expect(screen.getByTestId("display")).toHaveTextContent("-2"));
+
+    await user.click(screen.getByRole("button", { name: "+" }));
+    expect(screen.getByTestId("display")).toHaveTextContent("-2 +");
+
+    await user.click(screen.getByRole("button", { name: "⌫" }));
+    expect(screen.getByTestId("display")).toHaveTextContent("-2");
+
+    await user.click(screen.getByRole("button", { name: "⌫" }));
+    expect(screen.getByTestId("display")).toHaveTextContent("-2");
+
+    await user.click(screen.getByRole("button", { name: "7" }));
+    expect(screen.getByTestId("display")).toHaveTextContent("7");
+  });
+
+  it("shows Error in the display for a transient non-finite optimistic result before the backend responds", async () => {
+    let resolveCalculate!: (response: { ok: boolean; status: number; json: () => Promise<unknown> }) => void;
+    const calculateResponse = new Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>(
+      (resolve) => {
+        resolveCalculate = resolve;
+      },
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/api/v1/history")) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => ({ items: [], nextCursor: null }) });
+        }
+        return calculateResponse;
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderCalculator();
+
+    await user.click(screen.getByRole("button", { name: "5" }));
+    await user.click(screen.getByRole("button", { name: "÷" }));
+    await user.click(screen.getByRole("button", { name: "0" }));
+    await user.click(screen.getByRole("button", { name: "=" }));
+
+    await waitFor(() => expect(screen.getByTestId("value")).toHaveTextContent("Error"));
+
+    resolveCalculate({ ok: false, status: 400, json: async () => ({ error: "division by zero is not allowed" }) });
+    await waitFor(() =>
+      expect(screen.getByTestId("error")).toHaveTextContent("division by zero is not allowed"),
+    );
+  });
 });

@@ -2,7 +2,8 @@ import Decimal from "decimal.js";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import HistoryProvider, { useHistoryContext } from "./HistoryProvider";
+import HistoryProvider from "./HistoryProvider";
+import { useHistoryContext } from "./HistoryContext";
 import { fetchHistory } from "../../api/historyApi";
 import type { CalculateResult } from "../../api/calculatorApi";
 import type { HistoryEntry } from "../../types/history";
@@ -115,6 +116,34 @@ describe("HistoryContext optimisticUpdate", () => {
     rejectCalculate(new Error("boom"));
 
     await waitFor(() => expect(screen.getByTestId("entries")).toBeEmptyDOMElement());
+  });
+
+  it("does nothing visible when optimisticUpdate is called before the initial history loads", async () => {
+    let resolveFetch!: (response: unknown) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => new Promise((resolve) => (resolveFetch = resolve))),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <HistoryProvider historyPromise={fetchHistory(null, 20)}>
+        <QueueHarness makeCalculatePromise={() => Promise.resolve({ result: new Decimal(2), historyItem: realEntry })} />
+      </HistoryProvider>,
+    );
+
+    expect(screen.getByTestId("entries")).toBeEmptyDOMElement();
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "calculate" }));
+    });
+
+    expect(screen.getByTestId("entries")).toBeEmptyDOMElement();
+
+    await act(async () => {
+      resolveFetch({ ok: true, status: 200, json: async () => ({ items: [], nextCursor: null }) });
+      await Promise.resolve();
+    });
   });
 
   it("useHistoryContext throws when used outside a HistoryProvider", () => {
