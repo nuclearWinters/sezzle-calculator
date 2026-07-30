@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Suspense } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import History from "./History";
-import HistoryProvider from "./HistoryContext";
+import HistoryProvider from "./HistoryProvider";
 import HistoryLoading from "./HistoryLoading";
 import { fetchHistory } from "../../api/historyApi";
 

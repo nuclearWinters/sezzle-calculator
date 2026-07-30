@@ -31,5 +31,5 @@ export function useHistorySync(cursor: string | null | undefined, onEntry: (entr
     });
 
     return () => socket.close();
-  }, []);
+  }, [cursor]);
 }

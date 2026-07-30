@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Calculator from "./Calculator";
 import History from "../History/History";
-import HistoryProvider from "../History/HistoryContext";
+import HistoryProvider from "../History/HistoryProvider";
 import HistoryLoading from "../History/HistoryLoading";
 import { fetchHistory } from "../../api/historyApi";
 import { mockFetchRoutes } from "../../test/mockFetch";

@@ -54,7 +54,7 @@ export default function History() {
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, error]);
+  }, [hasMore, error, loadMore]);
 
   const items = entries ?? [];
 

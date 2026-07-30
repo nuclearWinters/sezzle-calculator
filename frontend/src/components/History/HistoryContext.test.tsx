@@ -2,7 +2,7 @@ import Decimal from "decimal.js";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import HistoryProvider, { useHistoryContext } from "./HistoryContext";
+import HistoryProvider, { useHistoryContext } from "./HistoryProvider";
 import { fetchHistory } from "../../api/historyApi";
 import type { CalculateResult } from "../../api/calculatorApi";
 import type { HistoryEntry } from "../../types/history";

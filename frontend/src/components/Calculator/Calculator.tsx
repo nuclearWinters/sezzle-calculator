@@ -1,4 +1,4 @@
-import { useEffect, useState, useOptimistic, useTransition } from "react";
+import { useEffect, useState, useOptimistic, useTransition, useCallback } from "react";
 import * as stylex from "@stylexjs/stylex";
 import Decimal from "decimal.js";
 import { calculate, CalculatorApiError } from "../../api/calculatorApi";
@@ -81,7 +81,7 @@ export default function Calculator() {
   const [isPending, startTransition] = useTransition()
   const { optimisticUpdate } = useHistoryContext();
 
-  function inputDigit(digit: string) {
+  const inputDigit = useCallback((digit: string) => {
     const active = operation === null ? firstNumber : secondNumber;
     const setActive = operation === null ? setFirstNumber : setSecondNumber;
 
@@ -96,9 +96,9 @@ export default function Calculator() {
     setError(null);
     setHasUserTypedAfterResult(true);
     setActive(active === "" || active === "0" ? digit : active + digit);
-  }
+  }, [firstNumber, operation, secondNumber])
 
-  function inputDecimal() {
+  const inputDecimal = useCallback(() => {
     const active = operation === null ? firstNumber : secondNumber;
     const setActive = operation === null ? setFirstNumber : setSecondNumber;
 
@@ -107,9 +107,9 @@ export default function Calculator() {
     setError(null);
     setHasUserTypedAfterResult(true);
     setActive((active === "" ? "0" : active) + ".");
-  }
+  }, [firstNumber, operation, secondNumber])
 
-  function inputExponent() {
+  const inputExponent = useCallback(() => {
     const active = operation === null ? firstNumber : secondNumber;
     const setActive = operation === null ? setFirstNumber : setSecondNumber;
 
@@ -122,9 +122,9 @@ export default function Calculator() {
     }
 
     setActive((active === "" || active === "0" ? "1" : active) + "e");
-  }
+  }, [firstNumber, operation, secondNumber])
 
-  function backspace() {
+  const backspace = useCallback(() => {
     if (operation !== null) {
       if (secondNumber === "") {
         setError(null);
@@ -148,9 +148,9 @@ export default function Calculator() {
       const next = current.slice(0, -1);
       return next === "-" ? "" : next;
     });
-  }
+  }, [firstNumber, operation, secondNumber])
 
-  function clear() {
+  const clear = useCallback(() => {
     setFirstNumber("");
     setSecondNumber("");
     setOperation(null);
@@ -160,9 +160,9 @@ export default function Calculator() {
     setLastEquation("");
     setLastResult(new Decimal(0));
     setHasUserTypedAfterResult(false);
-  }
+  }, [])
 
-  async function evaluate(nextOperation: BinaryOperation | null) {
+  const evaluate = useCallback(async (nextOperation: BinaryOperation | null) => {
     let opToApply: BinaryOperation;
     let first: Decimal;
     let second: Decimal;
@@ -206,9 +206,9 @@ export default function Calculator() {
         setError(err instanceof CalculatorApiError ? err.message : "Something went wrong. Please try again.");
       }
     })
-  }
+  }, [firstNumber, lastOperand, lastOperation, lastResultOpt, operation, optimisticUpdate, secondNumber, setLastEquationOpt, setLastResultOpt])
 
-  function chooseOperation(nextOperation: BinaryOperation) {
+  const chooseOperation = useCallback((nextOperation: BinaryOperation) => {
     if (operation !== null && secondNumber !== "") {
       evaluate(nextOperation);
       return;
@@ -220,9 +220,9 @@ export default function Calculator() {
     setHasUserTypedAfterResult(true);
     setOperation(nextOperation);
     setSecondNumber("");
-  }
+  }, [evaluate, firstNumber, lastResultOpt, operation, secondNumber])
 
-  async function identity() {
+  const identity = useCallback(async () => {
     const value: Decimal = new Decimal(firstNumber);
 
     setError(null);
@@ -247,15 +247,15 @@ export default function Calculator() {
         setError(err instanceof CalculatorApiError ? err.message : "Something went wrong. Please try again.");
       }
     })
-  }
+  }, [firstNumber, optimisticUpdate, setLastEquationOpt, setLastResultOpt])
 
-  function handleEquals() {
+  const handleEquals = useCallback(() => {
     if (operation === null && lastOperation === null && firstNumber !== "") {
       identity();
       return;
     }
     evaluate(null);
-  }
+  }, [evaluate, firstNumber, identity, lastOperation, operation])
 
   async function handleSqrt() {
     const canCalculate = secondNumber === ""

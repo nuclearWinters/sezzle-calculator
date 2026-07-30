@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import Calculator from "./components/Calculator/Calculator";
 import History from "./components/History/History";
-import HistoryProvider from "./components/History/HistoryContext";
+import HistoryProvider from "./components/History/HistoryProvider";
 import ErrorBoundary from "./components/ErrorBoundary/ErrorBoundary";
 import { fetchHistory } from "./api/historyApi";
 import { Suspense } from "react";
