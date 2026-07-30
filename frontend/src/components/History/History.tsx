@@ -37,17 +37,21 @@ export default function History() {
   const { entries, hasMore, isLoading, error, historyPromise, loadMore, historySync, syncCursor } = useHistoryContext();
   use(historyPromise)
   const sentinelRef = useRef(null)
+  const listRef = useRef<HTMLUListElement>(null)
   useHistorySync(syncCursor, historySync)
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel || !hasMore || error) return;
 
-    const observer = new IntersectionObserver((observerEntries) => {
-      if (observerEntries[0]?.isIntersecting) {
-        loadMore();
-      }
-    });
+    const observer = new IntersectionObserver(
+      (observerEntries) => {
+        if (observerEntries[0]?.isIntersecting) {
+          loadMore();
+        }
+      },
+      { root: listRef.current },
+    );
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [hasMore, error]);
@@ -60,17 +64,20 @@ export default function History() {
 
       {entries.length === 0 && !isLoading && !error && <HistoryEmpty />}
 
-      <ul {...stylex.props(styles.list)} data-testid="history-list">
+      <ul {...stylex.props(styles.list)} data-testid="history-list" ref={listRef}>
         {entries.map((entry) => (
           <HistoryListItem key={entry.id} entry={entry} />
         ))}
+        {hasMore && !error && (
+          <li>
+            <HistorySentinel ref={sentinelRef} />
+          </li>
+        )}
       </ul>
 
       {isLoading && <HistoryLoading />}
 
       {error && <HistoryError message={error} onRetry={loadMore} />}
-
-      {hasMore && !error && <HistorySentinel ref={sentinelRef} />}
     </div>
   );
 }
