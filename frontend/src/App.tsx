@@ -19,7 +19,7 @@ const styles = stylex.create({
   historyPanel: {
     display: {
       default: "contents",
-      "@media (max-width: 600px)": "none",
+      "@media (max-width: 800px)": "none",
     },
   },
 });

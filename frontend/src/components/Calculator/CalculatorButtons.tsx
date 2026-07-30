@@ -74,13 +74,13 @@ const styles = stylex.create({
   fullLabel: {
     display: {
       default: "inline",
-      "@media (max-width: 600px)": "none",
+      "@media (max-width: 800px)": "none",
     },
   },
   shortLabel: {
     display: {
       default: "none",
-      "@media (max-width: 600px)": "inline",
+      "@media (max-width: 800px)": "inline",
     },
   },
 });
